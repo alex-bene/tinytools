@@ -5,9 +5,10 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import logging
 import os
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Union
@@ -17,6 +18,7 @@ from dotenv import load_dotenv
 from litellm import JSONSchemaValidationError, completion
 from litellm.litellm_core_utils.json_validation_rule import validate_schema
 from PIL.Image import Image
+from tqdm import tqdm
 
 from .logger import get_logger
 
@@ -25,12 +27,14 @@ if TYPE_CHECKING:
 
 load_dotenv()
 
-
-logger = get_logger(__name__)
-
-litellm.suppress_debug_info = True
-
 ImageType = Union[str, Path, Image]
+
+# Setup logger
+logger = get_logger(__name__)
+## Suppress litellm logs
+litellm_logger = logging.getLogger("LiteLLM")
+litellm_logger.setLevel(logging.WARNING)
+litellm.suppress_debug_info = True
 
 
 class LiteLLMModel:
@@ -269,7 +273,7 @@ class LiteLLMModel:
         if not prompts:
             return []
 
-        completions = []
+        future_to_index = {}
         with ThreadPoolExecutor(max_workers=min(os.cpu_count(), len(prompts))) as executor:
             for idx, prompt in enumerate(prompts):
                 future = executor.submit(
@@ -279,5 +283,10 @@ class LiteLLMModel:
                     images=images[idx] if isinstance(images, list) else images,
                     response_format=response_format,
                 )
-                completions.append(future)
-        return [future.result() for future in completions]
+                future_to_index[future] = idx
+
+            results = [None] * len(prompts)
+            for future in tqdm(as_completed(future_to_index), total=len(prompts), desc="Processing prompts"):
+                results[future_to_index[future]] = future.result()
+
+        return results
