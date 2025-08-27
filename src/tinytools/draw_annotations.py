@@ -131,9 +131,10 @@ def draw_masks(
     # Create a copy of the original image for drawing
     image_mode = image.mode
     full_image = full_image.convert("RGBA")
+    width, height = full_image.size
 
-    if masks.ndim != 3 or masks.shape[1] != full_image.size[1] or masks.shape[2] != full_image.size[0]:
-        msg = f"Expected 3D tensor of shape (N, H, W) for masks, got {masks.shape}"
+    if masks.ndim != 3 or masks.shape[1] != height or masks.shape[2] != width:
+        msg = f"Expected 3D tensor of shape (N, {height}, {width}) for masks, got {masks.shape}"
         raise ValueError(msg)
 
     # Generate colors from colormap
