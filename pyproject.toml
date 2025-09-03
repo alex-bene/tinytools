@@ -15,8 +15,9 @@ requires-python = ">=3.9"
 dependencies = [
     "dotenv",
     "imageio[ffmpeg]",
-    "litellm",
+    "litellm>=1.41.2",
     "matplotlib",
+    "notebook>=7.4.5",
     "numpy",
     "rich",
 ]
