@@ -32,9 +32,10 @@ ImageType = Union[str, Path, Image]
 # Setup logger
 logger = get_logger(__name__)
 ## Suppress litellm logs
-litellm_logger = logging.getLogger("LiteLLM")
-litellm_logger.setLevel(logging.WARNING)
+logging.getLogger("LiteLLM").setLevel(logging.WARNING)
 litellm.suppress_debug_info = True
+## Supress 'httpx' logs
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 class LiteLLMModel:
@@ -255,6 +256,7 @@ class LiteLLMModel:
         system_prompts: list[str | None] | str | None = None,
         images: list[list[ImageType] | ImageType | None] | None = None,
         response_format: BaseModel | None = None,
+        no_progress_bar: bool = False,
     ) -> list[str]:
         """Make a forward pass through the VLM/LLM with optional images, system prompts and response format.
 
@@ -265,6 +267,7 @@ class LiteLLMModel:
             images (list[list[ImageType] | ImageType | None] | None, optional): The images to send to the model.
                 Defaults to None.
             response_format (pydantic.BaseModel | None, optional): The response format. Defaults to None.
+            no_progress_bar (bool, optional): Whether to disable the progress bar. Defaults to False.
 
         Returns:
             list[str]: The responses from the model.
@@ -286,7 +289,9 @@ class LiteLLMModel:
                 future_to_index[future] = idx
 
             results = [None] * len(prompts)
-            for future in tqdm(as_completed(future_to_index), total=len(prompts), desc="Processing prompts"):
+            for future in tqdm(
+                as_completed(future_to_index), total=len(prompts), desc="Processing prompts", disable=no_progress_bar
+            ):
                 results[future_to_index[future]] = future.result()
 
         return results
