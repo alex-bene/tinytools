@@ -148,7 +148,7 @@ def process_seg_masks(
     if draw_masks:
         full_image = image.copy().convert("RGBA")
     if remove_background:
-        no_background = Image.new("RGBA", full_image.size, (0, 0, 0, 0))
+        no_background = Image.new("RGBA", image.size, (0, 0, 0, 0))
 
     # Generate colors from colormap
     colors = _get_colormap(len(masks), colors, colormap)
