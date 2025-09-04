@@ -69,7 +69,7 @@ def imgs_from_array_batch(img_array_batch: np.ndarray, is_bgr: bool = False) -> 
 
 
 def image_grid(
-    image_list: list[Image.Image],
+    image_list: list[Image.Image | None],
     max_columns: int = 3,
     padding: int = 0,
     bg_color: tuple = (255, 255, 255),
@@ -78,11 +78,11 @@ def image_grid(
     """Create a grid of images from a list of image objects.
 
     Args:
-        image_list (list): A list of PIL Image objects. Assumes all images are the same size.
+        image_list (list[Image.Image | None]): A list of PIL Image objects or None. None values will be drawn as empty.
         max_columns (int, optional): The maximum number of columns in the grid. Defaults to 3.
         padding (int, optional): The number of pixels of padding between images. Defaults to 0.
         bg_color (tuple, optional): The background color for the grid and padding. Defaults to white (255, 255, 255).
-        resize_to_fit (bool, optional): If True, resizes images to fit the  grid cell dimensions without stretching.
+        resize_to_fit (bool, optional): If True, resizes images to fit the grid cell dimensions without stretching.
             Defaults to True.
 
     Returns:
@@ -101,6 +101,8 @@ def image_grid(
     max_width = 0
     max_height = 0
     for img in image_list:
+        if img is None:
+            continue
         max_width = max(max_width, img.width)
         max_height = max(max_height, img.height)
 
@@ -122,6 +124,9 @@ def image_grid(
 
     # --- Paste the images onto the grid ---
     for i, img in enumerate(image_list):
+        if img is None:
+            continue
+
         # Determine the row and column for the current image
         row_idx = i // cols
         col_idx = i % cols
