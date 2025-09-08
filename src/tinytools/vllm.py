@@ -53,13 +53,14 @@ class VLLMModel:
         max_retries: int = 3,
         ignore_not_found: bool = False,
         ignore_errors: bool = True,
+        gpu_memory_utilization: float = 0.9,
         vllm_model_kwargs: dict[str, Any] | None = None,
     ) -> None:
         super().__init__()
         self.max_retries = max_retries
         self.ignore_errors = ignore_errors
         self.ignore_not_found = ignore_not_found
-        self.model = LLM(model=model_name, gpu_memory_utilization=0.95, **(vllm_model_kwargs or {}))
+        self.model = LLM(model=model_name, gpu_memory_utilization=gpu_memory_utilization, **(vllm_model_kwargs or {}))
 
         # Setup cache folder
         self.cache_folder = (
