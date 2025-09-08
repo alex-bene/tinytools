@@ -4,3 +4,4 @@ from .litellm import LiteLLMModel
 from .logger import get_logger
 from .process_annotations import process_bboxes, process_seg_masks
 from .video import get_video_fps, load_video, save_video
+from .vllm import VLLMModel

@@ -20,6 +20,7 @@ dependencies = [
     "notebook>=7.4.5",
     "numpy",
     "rich",
+    "vllm>=v0.8.5",
 ]
 
 [build-system]

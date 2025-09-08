@@ -245,6 +245,7 @@ class LiteLLMModel:
 
         # Save the output to cache if it finished as expected
         if response_content not in ("", None):
+            savepath.parent.mkdir(parents=True, exist_ok=True)
             with savepath.open("w") as fp:
                 json.dump(response_content, fp)
 
