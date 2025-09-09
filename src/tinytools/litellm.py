@@ -37,6 +37,8 @@ litellm.suppress_debug_info = True
 ## Supress 'httpx' logs
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
+litellm.enable_json_schema_validation = False
+
 
 class LiteLLMModel:
     """LiteLLM wrapper.
@@ -82,7 +84,7 @@ class LiteLLMModel:
 
     @staticmethod
     def completion_with_retries(
-        model: str, messages: list[dict[str, str]], max_retries: int = 3, response_format: BaseModel | None = None
+        model: str, messages: list[dict[str, str]], max_retries: int = 3, response_format: type[BaseModel] | None = None
     ) -> dict[str, str]:
         """Completion with retries.
 
@@ -109,14 +111,15 @@ class LiteLLMModel:
         exception = None
         for _ in range(max_retries):
             try:
-                response = completion(model=model, messages=messages)
-                response_content = response.choices[0].message.content
+                response = completion(model=model, messages=messages, response_format=response_format)
+                response_content: str = response.choices[0].message.content
 
                 if response_content is None:
                     msg = "Failed to generate response. Maybe check your prompt."
                     raise ValueError(msg)  # noqa: TRY301
 
                 if response_format is not None:
+                    response_content = response_content.replace("```json", "").replace("```", "")
                     response_content = json.loads(response_content)
                     if isinstance(response_content, list):
                         response_content = response_content[0]
