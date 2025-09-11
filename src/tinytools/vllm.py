@@ -60,7 +60,11 @@ class VLLMModel:
         self.max_retries = max_retries
         self.ignore_errors = ignore_errors
         self.ignore_not_found = ignore_not_found
-        self.model = LLM(model=model_name, gpu_memory_utilization=gpu_memory_utilization, **(vllm_model_kwargs or {}))
+        self.model = None
+        if not ignore_not_found:
+            self.model = LLM(
+                model=model_name, gpu_memory_utilization=gpu_memory_utilization, **(vllm_model_kwargs or {})
+            )
 
         # Setup cache folder
         self.cache_folder = (
@@ -270,6 +274,10 @@ class VLLMModel:
 
         non_cached_idxs = [idx for idx, output in enumerate(outputs) if output is None]
         logger.info("Using %d cached responses.", len(messages) - len(non_cached_idxs))
+
+        if not non_cached_idxs:
+            return outputs
+
         messages = [message for idx, message in enumerate(messages) if idx in non_cached_idxs]
         hashkeys = [hashkey for idx, hashkey in enumerate(hashkeys) if idx in non_cached_idxs]
 
