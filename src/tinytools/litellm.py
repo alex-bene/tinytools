@@ -210,9 +210,7 @@ class LiteLLMModel:
             with savepath.open("r") as fp:
                 outputs = json.load(fp)
                 if response_format is not None:
-                    validate_schema(
-                        schema=response_format.model_json_schema(), response=json.dumps(outputs["final_response"])
-                    )
+                    validate_schema(schema=response_format.model_json_schema(), response=json.dumps(outputs))
                 return outputs
         elif self.ignore_not_found:
             return ""
