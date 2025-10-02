@@ -30,20 +30,26 @@ def get_level_text(record: LogRecord) -> Text:
     return Text.styled("[" + level_name.ljust(8) + "]", f"logging.level.{level_name}")
 
 
-def setup_prettier_root_logger(level: str = "NOTSET") -> Logger:
+def setup_prettier_root_logger(level: str = "NOTSET", rich_handler_kwargs: dict | None = None) -> Logger:
     """Set up the root logger.
 
     Args:
         level (str, optional): The logging level. Defaults to "NOTSET".
+        rich_handler_kwargs (dict, optional): Additional keyword arguments for the RichHandler.
 
     Returns:
         Logger: The root logger.
 
     """
     console = Console(theme=Theme({"log.time": "black", "log.path": Style(color="black", dim=True)}))
-    handler = RichHandler(
-        rich_tracebacks=True, tracebacks_show_locals=True, tracebacks_width=100, console=console, log_time_format="[%X]"
-    )
+    rich_handler_kwargs = {
+        "rich_tracebacks": True,
+        "tracebacks_show_locals": False,
+        "tracebacks_width": 100,
+        "console": console,
+        "log_time_format": "[%X]",
+    } | (rich_handler_kwargs or {})
+    handler = RichHandler(**rich_handler_kwargs)
     handler.get_level_text = get_level_text
     handler.setFormatter(logging.Formatter("[%(name)s:%(funcName)s] %(message)s", datefmt="%X"))
 
