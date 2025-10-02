@@ -33,18 +33,7 @@ class FinishReasonError(Exception):
 
 
 class VLLMModel:
-    """LiteLLM wrapper.
-
-    Args:
-        model (str, optional): The name of the model to use. Defaults to "Qwen/Qwen2.5-VL-7B-Instruct".
-        cache_folder (str | Path | None, optional): The path to the cache folder. If None, it will be set to
-            "~/.cache/tinytools/vlm_cache". Defaults to None.
-        max_retries (int, optional): The maximum number of retries. Defaults to 3.
-        ignore_not_found (bool, optional): Whether to ignore not found errors. Defaults to False.
-        ignore_errors (bool, optional): Whether to ignore `ValidationError`s and `FinishReasonError`s in the model
-            completion. Defaults to True.
-
-    """
+    """LiteLLM wrapper."""
 
     def __init__(
         self,
@@ -55,11 +44,29 @@ class VLLMModel:
         ignore_errors: bool = True,
         gpu_memory_utilization: float = 0.9,
         vllm_model_kwargs: dict[str, Any] | None = None,
+        ignore_cache: bool = False,
+        no_cache: bool = False,
     ) -> None:
+        """Initialize the VLLM model.
+
+        Args:
+            model (str, optional): The name of the model to use. Defaults to "Qwen/Qwen2.5-VL-7B-Instruct".
+            cache_folder (str | Path | None, optional): The path to the cache folder. If None, it will be set to
+                "~/.cache/tinytools/vlm_cache". Defaults to None.
+            max_retries (int, optional): The maximum number of retries. Defaults to 3.
+            ignore_not_found (bool, optional): Whether to ignore not found errors. Defaults to False.
+            ignore_errors (bool, optional): Whether to ignore `ValidationError`s and `FinishReasonError`s in the model
+                completion. Defaults to True.
+            ignore_cache (bool, optional): Whether to ignore cache hits. Defaults to False.
+            no_cache (bool, optional): Whether to disable caching. Defaults to False.
+
+        """
         super().__init__()
         self.max_retries = max_retries
         self.ignore_errors = ignore_errors
         self.ignore_not_found = ignore_not_found
+        self.ignore_cache = ignore_cache
+        self.no_cache = no_cache
         self.model = None
         if not ignore_not_found:
             self.model = LLM(
@@ -119,7 +126,7 @@ class VLLMModel:
                 last_exception.add_note(f"Error encountered after {try_counter - 1} retries.")
                 if self.ignore_errors:
                     logger.exception(last_exception)
-                    responses_dict |= dict.fromkeys(current_hashkeys, "")
+                    responses_dict |= dict.fromkeys(current_hashkeys, None)
                     break
                 raise last_exception
             responses = self.model.chat(
@@ -206,7 +213,7 @@ class VLLMModel:
         savepath = self.cache_folder / f"{hashkey}.json"
 
         # Check if the answers file exists
-        if savepath.exists():
+        if savepath.exists() and not self.ignore_cache:
             with savepath.open("r") as fp:
                 outputs = json.load(fp)
                 if response_format is not None:
@@ -238,7 +245,7 @@ class VLLMModel:
         response_format: BaseModel | None = None,
         no_progress_bar: bool = False,
         max_tokens: int = 4096,
-    ) -> list[str]:
+    ) -> list[str | None]:
         """Make a forward pass through the VLM/LLM with optional images, system prompts and response format.
 
         Args:
@@ -252,7 +259,7 @@ class VLLMModel:
             max_tokens (int, optional): The maximum number of tokens to generate. Defaults to 4096.
 
         Returns:
-            list[str]: The responses from the model.
+            list[str | None]: The responses from the model.
 
         """
         if not prompts:
@@ -270,11 +277,12 @@ class VLLMModel:
             ],
             strict=True,
         )
-        outputs = list(outputs)
+        outputs = list(outputs)  # None means cache miss, "" means ignore not found
 
         non_cached_idxs = [idx for idx, output in enumerate(outputs) if output is None]
         logger.info("Using %d cached responses.", len(messages) - len(non_cached_idxs))
 
+        outputs = [output if output != "" else None for output in outputs]
         if not non_cached_idxs:
             return outputs
 
@@ -295,7 +303,7 @@ class VLLMModel:
             response_format=response_format,
             no_progress_bar=no_progress_bar,
             sampling_params=sampling_params,
-        )
+        )  # returns None if failed
 
         # Add cached responses
         if non_cached_idxs:
@@ -304,8 +312,7 @@ class VLLMModel:
             # Append the response to the list of responses
             outputs[non_cached_idx] = response
             # Save the output to cache if it finished as expected
-            assert response is not None
-            if response != "":
+            if response is not None and not self.no_cache:
                 with savepaths[non_cached_idx].open("w") as fp:
                     json.dump(response, fp)
 

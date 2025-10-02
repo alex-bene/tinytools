@@ -41,15 +41,7 @@ litellm.enable_json_schema_validation = False
 
 
 class LiteLLMModel:
-    """LiteLLM wrapper.
-
-    Args:
-        model (str, optional): The name of the model to use. Defaults to "gemini/gemini-2.5".
-        cache_folder (str | Path | None, optional): The path to the cache folder. Defaults to None.
-        max_retries (int, optional): The maximum number of retries. Defaults to 3.
-        ignore_not_found (bool, optional): Whether to ignore not found errors. Defaults to False.
-
-    """
+    """LiteLLM wrapper."""
 
     def __init__(
         self,
@@ -57,11 +49,26 @@ class LiteLLMModel:
         cache_folder: str | Path | None = None,
         max_retries: int = 3,
         ignore_not_found: bool = False,
+        ignore_cache: bool = False,
+        no_cache: bool = False,
     ) -> None:
+        """Initialize the LiteLLM model.
+
+        Args:
+            model (str, optional): The name of the model to use. Defaults to "gemini/gemini-2.5".
+            cache_folder (str | Path | None, optional): The path to the cache folder. Defaults to None.
+            max_retries (int, optional): The maximum number of retries. Defaults to 3.
+            ignore_not_found (bool, optional): Whether to ignore requests not in cache. Defaults to False.
+            ignore_cache (bool, optional): Whether to ignore cache hits. Defaults to False.
+            no_cache (bool, optional): Whether to disable caching. Defaults to False.
+
+        """
         super().__init__()
         self.model = model
         self.max_retries = max_retries
         self.ignore_not_found = ignore_not_found
+        self.ignore_cache = ignore_cache
+        self.no_cache = no_cache
 
         # Setup cache folder
         self.cache_folder = (
@@ -147,14 +154,14 @@ class LiteLLMModel:
             msg = "Failed to validate the response. Retry later."
             logger.warning(msg)
             logger.warning(response_content)
-            response.choices[0].message.content = ""
+            response.choices[0].message.content = None
             return response
         if (
             isinstance(exception, ValueError)
             and exception.args[0] == "Failed to generate response. Maybe check your prompt."
         ):
             logger.warning("Failed to generate response. Maybe check your prompt.")
-            response.choices[0].message.content = ""
+            response.choices[0].message.content = None
             return response
 
         msg = f"Error encountered after {max_retries} retries."
@@ -177,7 +184,7 @@ class LiteLLMModel:
             response_format (pydantic.BaseModel | None, optional): The response format. Defaults to None.
 
         Returns:
-            str: The response from the model.
+            str | None: The response from the model.
 
         """
         if system_prompt == "":
@@ -206,14 +213,14 @@ class LiteLLMModel:
         savepath = savepath_alt if savepath_alt.exists() and not savepath.exists() else savepath
 
         # Check if the answers file exists
-        if savepath.exists():
+        if savepath.exists() and not self.ignore_cache:
             with savepath.open("r") as fp:
                 outputs = json.load(fp)
                 if response_format is not None:
                     validate_schema(schema=response_format.model_json_schema(), response=json.dumps(outputs))
                 return outputs
         elif self.ignore_not_found:
-            return ""
+            return None
 
         # Generate the response
         messages = [{"role": "system", "content": system_prompt}] if system_prompt is not None else []
@@ -231,21 +238,21 @@ class LiteLLMModel:
         ## Generate reply and apply response_format
         response = self.completion_with_retries(
             model=self.model, messages=messages, max_retries=self.max_retries, response_format=response_format
-        )
+        )  # returns None if failed
         ## Check if the model did not finish as expected
         if response.choices[0].finish_reason != "stop":
             msg = f"The model did not finish as expected. Got finish_reason = {response.choices[0].finish_reason}"
             logger.warning(msg)
-            return ""
+            return None
         ## Append the response to the list of responses
         response_content = (
             response.choices[0].message.content
-            if response_format is None
+            if response_format is None or response.choices[0].message.content is None
             else json.loads(response.choices[0].message.content)
         )
 
         # Save the output to cache if it finished as expected
-        if response_content not in ("", None):
+        if response_content is not None and not self.no_cache:
             savepath.parent.mkdir(parents=True, exist_ok=True)
             with savepath.open("w") as fp:
                 json.dump(response_content, fp)
@@ -259,7 +266,7 @@ class LiteLLMModel:
         images: list[list[ImageType] | ImageType | None] | None = None,
         response_format: BaseModel | None = None,
         no_progress_bar: bool = False,
-    ) -> list[str]:
+    ) -> list[str | None]:
         """Make a forward pass through the VLM/LLM with optional images, system prompts and response format.
 
         Args:
@@ -272,7 +279,7 @@ class LiteLLMModel:
             no_progress_bar (bool, optional): Whether to disable the progress bar. Defaults to False.
 
         Returns:
-            list[str]: The responses from the model.
+            list[str | None]: The responses from the model.
 
         """
         if not prompts:
