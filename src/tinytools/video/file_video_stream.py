@@ -72,7 +72,7 @@ class FileVideoStream:
                 # native threads and overheads of additional
                 # producer/consumer queues since this one was generally
                 # idle grabbing frames.
-                if self.transform:
+                if self.transform and frame is not None:
                     frame = self.transform(frame)
 
                 # add the frame to the queue
