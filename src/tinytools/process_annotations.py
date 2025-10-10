@@ -117,6 +117,7 @@ def process_seg_masks(
     transparency: float = 0.5,
     draw_masks: bool = True,
     remove_background: bool = True,
+    return_binary_mask: bool = False,
 ) -> dict[str, Image.Image]:
     """Draw masks on image and remove background.
 
@@ -130,13 +131,15 @@ def process_seg_masks(
         transparency (float, optional): Transparency level of mask overlay (0-1). Defaults to 0.5.
         draw_masks (bool, optional): Whether to return an image with drawn masks. Defaults to True.
         remove_background (bool, optional): Whether to return an image with background removed. Defaults to True.
+        return_binary_mask (bool, optional): Whether to return a binary mask. Defaults to False.
 
     Returns:
-        dict[str, Image.Image]: A dictionary containing the original image with masks drawn if `draw_masks` is True, and
-            the image with all the regions apart from the masks (background) replaced with transparency.
+        dict[str, Image.Image]: A dictionary containing the original image with masks drawn if `draw_masks` is True, the
+            image with all the regions apart from the masks (background) replaced with transparency if
+            `remove_background` is True, and the binary mask if `return_binary_mask` is True.
 
     """
-    if masks is None or (not draw_masks and not remove_background):
+    if masks is None or (not draw_masks and not remove_background and not return_binary_mask):
         return {}
 
     width, height = image.size
@@ -149,6 +152,8 @@ def process_seg_masks(
         full_image = image.copy().convert("RGBA")
     if remove_background:
         no_background = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    if return_binary_mask:
+        binary_mask = Image.fromarray(masks.any(axis=0).astype(bool))
 
     # Generate colors from colormap
     colors = _get_colormap(len(masks), colors, colormap)
@@ -173,5 +178,7 @@ def process_seg_masks(
         results["image"] = full_image.convert(image_mode)
     if remove_background:
         results["no_background_image"] = no_background
+    if return_binary_mask:
+        results["binary_mask"] = binary_mask
 
     return results
