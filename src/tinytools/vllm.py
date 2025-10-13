@@ -9,13 +9,18 @@ from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from dotenv import load_dotenv
-from jsonschema import ValidationError, validate
 from PIL.Image import Image
-from vllm import LLM, RequestOutput, SamplingParams
-from vllm.sampling_params import GuidedDecodingParams
 
 from .logger import get_logger
+
+try:
+    from dotenv import load_dotenv
+    from jsonschema import ValidationError, validate
+    from vllm import LLM, RequestOutput, SamplingParams
+    from vllm.sampling_params import GuidedDecodingParams
+except ImportError as e:
+    msg = 'LLM features are not available. Please install the required dependencies with: pip install "tinytools[llm]"'
+    raise ImportError(msg) from e
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
@@ -50,13 +55,14 @@ class VLLMModel:
         """Initialize the VLLM model.
 
         Args:
-            model (str, optional): The name of the model to use. Defaults to "Qwen/Qwen2.5-VL-7B-Instruct".
+            model_name (str, optional): The name of the model to use. Defaults to "Qwen/Qwen2.5-VL-7B-Instruct".
             cache_folder (str | Path | None, optional): The path to the cache folder. If None, it will be set to
                 "~/.cache/tinytools/vlm_cache". Defaults to None.
             max_retries (int, optional): The maximum number of retries. Defaults to 3.
             ignore_not_found (bool, optional): Whether to ignore not found errors. Defaults to False.
             ignore_errors (bool, optional): Whether to ignore `ValidationError`s and `FinishReasonError`s in the model
                 completion. Defaults to True.
+            gpu_memory_utilization (float, optional): The max GPU memory utilization. Defaults to 0.9.
             ignore_cache (bool, optional): Whether to ignore cache hits. Defaults to False.
             no_cache (bool, optional): Whether to disable caching. Defaults to False.
 

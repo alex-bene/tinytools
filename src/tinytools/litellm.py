@@ -13,17 +13,24 @@ from io import BytesIO
 from pathlib import Path
 from typing import TYPE_CHECKING, Union
 
-import litellm
-from dotenv import load_dotenv
-from litellm import JSONSchemaValidationError, completion
-from litellm.litellm_core_utils.json_validation_rule import validate_schema
 from PIL.Image import Image
 from tqdm import tqdm
 
 from .logger import get_logger
 
+try:
+    import litellm
+    from dotenv import load_dotenv
+    from litellm import JSONSchemaValidationError, completion
+    from litellm.litellm_core_utils.json_validation_rule import validate_schema
+except ImportError as e:
+    msg = 'LLM features are not available. Please install the required dependencies with: pip install "tinytools[llm]"'
+    raise ImportError(msg) from e
+
+
 if TYPE_CHECKING:
     from pydantic import BaseModel
+
 
 load_dotenv()
 
