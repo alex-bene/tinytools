@@ -30,7 +30,7 @@ class RateColumn(ProgressColumn):
             precision = 0 if unit == 1 else 1
         else:
             unit, suffix = filesize.pick_unit_and_suffix(speed, [""], 1)
-            precision = 1
+            precision = 2
         return (
             Text(f"{speed / unit:,.{precision}f} {suffix}{self.unit}/s", style="progress.data.speed")
             if speed / unit >= 1
