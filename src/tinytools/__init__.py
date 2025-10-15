@@ -32,7 +32,7 @@ __all__ = [
 ]
 
 # An internal mapping from the public name to its source module.
-_LAZY_MAPPING = {"LitLLMModel": ".litellm", "VLLMModel": ".vllm"}
+_LAZY_MAPPING = {"LiteLLMModel": ".litellm", "VLLMModel": ".vllm"}
 
 
 def __getattr__(name: str) -> Any:
