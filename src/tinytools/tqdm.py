@@ -6,8 +6,6 @@ import tqdm as tqdm_og
 from rich.progress import ProgressColumn, Task, Text, filesize
 from tqdm import rich as tqdm_rich
 
-tqdm_og.tqdm = tqdm_rich.tqdm
-
 
 class RateColumn(ProgressColumn):
     """Renders human readable transfer speed."""
