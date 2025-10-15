@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import partial
 from pathlib import Path
 
@@ -19,14 +20,14 @@ logger = get_logger(__name__)
 
 
 def load_video(
-    path: str | Path, as_array: bool = False, max_frames: int = -1, as_rgb: bool = False
+    path: str | Path, max_frames: int = -1, as_array: bool = False, as_rgb: bool = False
 ) -> list[Image.Image] | np.ndarray:
     """Load video as list of PIL images or as a NumPy array.
 
     Args:
         path (str | Path): The path to the video file.
-        as_array (bool, optional): Whether to load the video as a NumPy array. Defaults to False.
         max_frames (int, optional): The maximum number of frames to load. Defaults to -1 (all frames).
+        as_array (bool, optional): Whether to load the video as a NumPy array. Defaults to False.
         as_rgb (bool, optional): Whether to load the video as RGB. Only applicable if `as_array` is True.
             Defaults to False.
 
@@ -35,28 +36,53 @@ def load_video(
             of the array are (frames, height, width, channels).
 
     """
+    if not Path(path).exists():
+        return [] if not as_array else np.empty((0, 0, 0, 3))
+
     transform = None
     if not as_array:
         transform = lambda x: Image.fromarray(cv2.cvtColor(x, cv2.COLOR_BGR2RGB))  # noqa: E731
     elif as_rgb:  # and as_array
         transform = partial(cv2.cvtColor, code=cv2.COLOR_BGR2RGB)
 
-    cap = FileVideoStream(str(path), transform=transform)
-    frames = []
+    cap = FileVideoStream(str(path), transform=transform, max_frames=max_frames)
     cap.start()
-    num_frames = 0
-    while True:
-        frame = cap.read()
-        if frame is None or (max_frames > 0 and num_frames >= max_frames):
-            break
-        frames.append(frame)
-        num_frames += 1
+    frames = []
+    while cap.running():
+        frames.append(cap.read())
     cap.stop()
 
-    if as_array:
-        return np.stack(frames)
+    return np.stack(frames) if as_array else frames
 
-    return frames
+
+def load_videos(
+    paths: list[str | Path], max_frames: int = -1, as_array: bool = False, as_rgb: bool = False, workers: int = 32
+) -> list[list[Image.Image] | np.ndarray]:
+    """Load multiple videos in parallel as a list of lists of PIL images or as a list of NumPy arrays.
+
+    Args:
+        paths (list[str | Path]): The paths to the video files.
+        max_frames (int, optional): The maximum number of frames to load. Defaults to -1 (all frames).
+        as_array (bool, optional): Whether to load the video as a NumPy array. Defaults to False.
+        as_rgb (bool, optional): Whether to load the video as RGB. Only applicable if `as_array` is True.
+            Defaults to False.
+        workers (int, optional): The maximum number of threads to use for parallel loading. Defaults to 32.
+
+    Returns:
+        list[list[Image.Image] | np.ndarray]: A list of lists of PIL images or a list of NumPy arrays if `as_array` is
+            True. The dimensions of the array are (frames, height, width, channels).
+
+    """
+    results = [None] * len(paths)
+    with ThreadPoolExecutor(max_workers=min(workers, len(paths))) as ex:
+        future_to_idx = {
+            ex.submit(load_video, path=p, max_frames=max_frames, as_array=as_array, as_rgb=as_rgb): i
+            for i, p in enumerate(paths)
+        }
+        for fut in as_completed(future_to_idx):
+            results[future_to_idx[fut]] = fut.result()
+
+    return results
 
 
 def save_video(video_frames: list[Image.Image], path: str | Path = "output.mp4", fps: float = 30.0) -> None:

@@ -21,13 +21,16 @@ if TYPE_CHECKING:
 class FileVideoStream:
     """FileVideoStream class for efficiently reading from a video file."""
 
-    def __init__(self, path: str, transform: Callable | None = None, queue_size: int = 128) -> None:
+    def __init__(
+        self, path: str, transform: Callable | None = None, queue_size: int = 128, max_frames: int = -1
+    ) -> None:
         """Initialize the file video stream class."""
         # initialize the file video stream along with the boolean
         # used to indicate if the thread should be stopped or not
         self.stream = cv2.VideoCapture(path)
         self.stopped = False
         self.transform = transform
+        self.max_frames = max_frames
 
         # initialize the queue used to store frames read from
         # the video file
@@ -44,7 +47,8 @@ class FileVideoStream:
     def update(self) -> None:
         """Update function for the seperate thread that reads frames from the video stream."""
         # keep looping infinitely
-        while True:
+        num_frames = 0
+        while num_frames < self.max_frames or self.max_frames < 0:
             # if the thread indicator variable is set, stop the
             # thread
             if self.stopped:
@@ -57,8 +61,11 @@ class FileVideoStream:
 
                 # if the `grabbed` boolean is `False`, then we have
                 # reached the end of the video file
-                if not grabbed:
+                if not grabbed or frame is None:
                     self.stopped = True
+                    break
+
+                num_frames += 1
 
                 # if there are transforms to be done, might as well
                 # do them on producer thread before handing back to
@@ -72,7 +79,7 @@ class FileVideoStream:
                 # native threads and overheads of additional
                 # producer/consumer queues since this one was generally
                 # idle grabbing frames.
-                if self.transform and frame is not None:
+                if self.transform:
                     frame = self.transform(frame)
 
                 # add the frame to the queue
@@ -80,6 +87,7 @@ class FileVideoStream:
             else:
                 time.sleep(0.1)  # Rest for 10ms, we have a full queue
 
+        self.stopped = True
         self.stream.release()
 
     def read(self) -> np.ndarray:
