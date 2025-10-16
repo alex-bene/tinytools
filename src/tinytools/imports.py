@@ -6,8 +6,12 @@ import importlib
 import sys
 from typing import TYPE_CHECKING, Any
 
+from .logger import get_logger
+
 if TYPE_CHECKING:
     import types
+
+logger = get_logger(__name__)
 
 
 def module_from_obj(x: Any) -> types.ModuleType:
@@ -22,3 +26,15 @@ def module_from_obj(x: Any) -> types.ModuleType:
                 return mod
     msg = f"couldn't load module for {type(x)}"
     raise ImportError(msg)
+
+
+def module_available(name: str, msg: str | None = None) -> bool:
+    """Check if a module is available."""
+    try:
+        importlib.import_module(name)
+    except ImportError:
+        if msg is not None:
+            logger.warning(msg)
+        return False
+    else:
+        return True
