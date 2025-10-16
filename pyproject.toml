@@ -18,6 +18,7 @@ dependencies = [
     "numpy",
     "opencv-python-headless>=4.11",
     "rich",
+    "tqdm",
 ]
 
 [project.optional-dependencies]

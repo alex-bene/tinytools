@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
 import numpy as np
 from matplotlib import pyplot as plt
 from PIL import Image, ImageDraw
 
+from .imports import module_from_obj
 from .logger import get_logger
+
+if TYPE_CHECKING:
+    from torch import Tensor
+else:
+    Tensor = Any
 
 logger = get_logger(__name__)
 
@@ -182,3 +190,75 @@ def process_seg_masks(
         results["binary_mask"] = binary_mask
 
     return results
+
+
+def bbox_center(bboxes: np.ndarray | Tensor) -> np.ndarray | Tensor:
+    """Get the center of the bounding box from coordinates (x_min, y_min, x_max, y_max)."""
+    if bboxes.shape[-1] != 4:
+        msg = "bboxes must be a tensor/array with shape (..., 4)"
+        raise ValueError(msg)
+    return (bboxes[..., :2] + bboxes[..., 2:]) / 2
+
+
+def pad_bboxes(
+    bboxes: list | np.ndarray | Tensor, image_sizes: list | np.ndarray | Tensor | None, padding_perc: float = 0.1
+) -> list[list[float]] | np.ndarray | Tensor:
+    """Pad/dialate the bounding boxes by a percentage of their width and height.
+
+    Accepts lists, tuples, numpy arrays and torch tensors.
+
+    Args:
+        bboxes (list | np.ndarray | torch.Tensor): Bounding boxes coordinates (x_min, y_min, x_max, y_max). Can be
+            in absolute or relative coordinates.
+        image_sizes (list | np.ndarray | torch.Tensor | None): Image sizes (width, height). If None, assume relative
+            coordinates.
+        padding_perc (float, optional): Percentage of padding. Defaults to 0.1.
+
+    Returns:
+        list | np.ndarray | torch.Tensor: Padded bounding boxes coordinates (x_min, y_min, x_max, y_max).
+
+    """
+    # Convert to numpy if list/tuple
+    to_list = False
+    if isinstance(bboxes, (list, tuple)):
+        bboxes = np.asarray(bboxes)
+        image_sizes = np.asarray(image_sizes) if image_sizes is not None else None
+        to_list = True
+    # Get module (torch or numpy)
+    module = module_from_obj(bboxes)
+    # Make sure inputs where correct type
+    if module.__name__ not in ["torch", "numpy"]:
+        msg = "bboxes must be a list, tuple, numpy array or torch tensor"
+        raise TypeError(msg)
+    # Check if bboxes are integers so we need to cast in the end
+    is_int = (module.__name__ == "torch" and not module.is_floating_point(bboxes)) or bboxes.dtype.kind == "i"
+    # If image_sizes is None, assume relative coordinates
+    if image_sizes is None:
+        image_sizes = module.ones_like(bboxes[..., :2])
+    # Check input shapes
+    if bboxes.shape[-1] != 4:
+        msg = "bboxes must be shape (..., 4)"
+        raise ValueError(msg)
+    if image_sizes.shape[-1] != 2:
+        msg = "image_sizes must be shape (..., 2)"
+        raise ValueError(msg)
+    if module.all(bboxes.shape[:-1] != image_sizes.shape[:-1]):
+        msg = "bboxes and image_sizes must have the same number of dims and same size in each (apart from the last)"
+        raise ValueError(msg)
+    # Get padded bboxes
+    bbox_widths = bboxes[..., 2] - bboxes[..., 0]
+    bbox_heights = bboxes[..., 3] - bboxes[..., 1]
+    dx = bbox_widths * float(padding_perc)
+    dy = bbox_heights * float(padding_perc)
+    ## Support bboxes that are over the image borders (does not pad them in the dim that exceeds the image)
+    xmin = module.maximum(module.minimum(bboxes[..., 0], 0), module.floor(bboxes[..., 0] - dx))
+    ymin = module.maximum(module.minimum(bboxes[..., 1], 0), module.floor(bboxes[..., 1] - dy))
+    xmax = module.minimum(module.maximum(bboxes[..., 2], image_sizes[..., 0]), module.ceil(bboxes[..., 2] + dx))
+    ymax = module.minimum(module.maximum(bboxes[..., 3], image_sizes[..., 1]), module.ceil(bboxes[..., 3] + dy))
+    padded_bboxes = module.stack([xmin, ymin, xmax, ymax], -1)
+    # Cast if needed and return
+    if is_int:
+        padded_bboxes = padded_bboxes.int() if module.__name__ == "torch" else padded_bboxes.astype(int)
+    if to_list:
+        return padded_bboxes.tolist()
+    return padded_bboxes

@@ -3,8 +3,9 @@ from typing import TYPE_CHECKING, Any
 
 from .archives import safe_tar_extract_all, safe_zip_extract_all
 from .image import image_grid, img_from_array, imgs_from_array_batch
+from .imports import module_from_obj
 from .logger import get_logger, setup_prettier_root_logger
-from .process_annotations import process_bboxes, process_seg_masks
+from .process_annotations import bbox_center, pad_bboxes, process_bboxes, process_seg_masks
 from .suppressors import suppress_logging, suppress_output, suppress_tqdm
 from .tqdm import setup_prettier_tqdm
 from .video import get_video_fps, load_video, load_videos, save_video
@@ -16,6 +17,7 @@ if TYPE_CHECKING:
 __all__ = [
     "LiteLLMModel",
     "VLLMModel",
+    "bbox_center",
     "get_logger",
     "get_video_fps",
     "image_grid",
@@ -23,6 +25,8 @@ __all__ = [
     "imgs_from_array_batch",
     "load_video",
     "load_videos",
+    "module_from_obj",
+    "pad_bboxes",
     "process_bboxes",
     "process_seg_masks",
     "safe_tar_extract_all",
