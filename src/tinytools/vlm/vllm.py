@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from PIL.Image import Image
 
-from .logger import get_logger
+from tinytools.logger import get_logger
 
 try:
     from dotenv import load_dotenv

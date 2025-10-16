@@ -11,11 +11,13 @@ from .tqdm import setup_prettier_tqdm
 from .video import get_video_fps, load_video, load_videos, save_video
 
 if TYPE_CHECKING:
-    from .litellm import LiteLLMModel
-    from .vllm import VLLMModel
+    from .vlm.litellm import LiteLLMModel
+    from .vlm.openai import OpenAIAPIModel
+    from .vlm.vllm import VLLMModel
 
 __all__ = [
     "LiteLLMModel",
+    "OpenAIAPIModel",
     "VLLMModel",
     "bbox_center",
     "get_logger",
@@ -40,7 +42,7 @@ __all__ = [
 ]
 
 # An internal mapping from the public name to its source module.
-_LAZY_MAPPING = {"LiteLLMModel": ".litellm", "VLLMModel": ".vllm"}
+_LAZY_MAPPING = {"LiteLLMModel": ".vlm.litellm", "VLLMModel": ".vlm.vllm", "OpenAIAPIModel": ".vlm.openai"}
 
 
 def __getattr__(name: str) -> Any:

@@ -22,7 +22,13 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-llm = ["litellm>=1.41.2", "vllm>=v0.8.5", "jsonschema>=4.25.1", "dotenv"]
+llm = [
+    "litellm>=1.41.2",
+    "vllm>=v0.8.5",
+    "jsonschema>=4.25.1",
+    "dotenv",
+    "openai>=1.101.0",
+]
 
 [build-system]
 requires = ["uv_build>=0.8.2,<0.9.0"]

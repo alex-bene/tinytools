@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Union
 from PIL.Image import Image
 from tqdm import tqdm
 
-from .logger import get_logger
+from tinytools.logger import get_logger
 
 try:
     import litellm
