@@ -63,6 +63,7 @@ class VLLMModel:
             ignore_errors (bool, optional): Whether to ignore `ValidationError`s and `FinishReasonError`s in the model
                 completion. Defaults to True.
             gpu_memory_utilization (float, optional): The max GPU memory utilization. Defaults to 0.9.
+            vllm_model_kwargs (dict[str, Any] | None, optional): The kwargs to pass to the VLLM model. Defaults to None.
             ignore_cache (bool, optional): Whether to ignore cache hits. Defaults to False.
             no_cache (bool, optional): Whether to disable caching. Defaults to False.
 
