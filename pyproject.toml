@@ -29,6 +29,7 @@ llm = [
     "dotenv",
     "openai>=1.101.0",
 ]
+3d = ["torch", "pytorch3d", "trimesh"]
 
 [build-system]
 requires = ["uv_build>=0.8.2,<0.9.0"]

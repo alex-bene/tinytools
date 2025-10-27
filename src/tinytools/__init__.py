@@ -13,6 +13,7 @@ from .transforms import resize
 from .video import get_video_fps, load_video, load_videos, save_video
 
 if TYPE_CHECKING:
+    from .meshes import to_trimesh
     from .vlm.litellm import LiteLLMModel
     from .vlm.openai import OpenAIAPIModel
     from .vlm.vllm import VLLMModel
@@ -44,10 +45,16 @@ __all__ = [
     "suppress_logging",
     "suppress_output",
     "suppress_tqdm",
+    "to_trimesh",
 ]
 
 # An internal mapping from the public name to its source module.
-_LAZY_MAPPING = {"LiteLLMModel": ".vlm.litellm", "VLLMModel": ".vlm.vllm", "OpenAIAPIModel": ".vlm.openai"}
+_LAZY_MAPPING = {
+    "LiteLLMModel": ".vlm.litellm",
+    "VLLMModel": ".vlm.vllm",
+    "OpenAIAPIModel": ".vlm.openai",
+    "to_trimesh": ".meshes",
+}
 
 
 def __getattr__(name: str) -> Any:
