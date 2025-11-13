@@ -30,15 +30,20 @@ def get_level_text(record: LogRecord) -> Text:
     return Text.styled("[" + level_name.ljust(8) + "]", f"logging.level.{level_name}")
 
 
-def setup_prettier_root_logger(level: str = "NOTSET", rich_handler_kwargs: dict | None = None) -> Logger:
-    """Set up the root logger.
+def setup_prettier_logger(
+    logger: Logger | None = None,
+    level: str | None = None,
+    rich_handler_kwargs: dict | None = None,
+    replace_handlers: bool = True,
+) -> None:
+    """Set up the logger.
 
     Args:
-        level (str, optional): The logging level. Defaults to "NOTSET".
+        logger (Logger | None, optional): The logger to configure. If None, the root logger will be used.
+            Defaults to None.
+        level (str | None, optional): The logging level. If None, the default level will be used. Defaults to None.
         rich_handler_kwargs (dict, optional): Additional keyword arguments for the RichHandler.
-
-    Returns:
-        Logger: The root logger.
+        replace_handlers (bool, optional): Whether to replace the default handlers or add to them. Defaults to True.
 
     """
     console = Console(theme=Theme({"log.time": "black", "log.path": Style(color="black", dim=True)}))
@@ -53,12 +58,16 @@ def setup_prettier_root_logger(level: str = "NOTSET", rich_handler_kwargs: dict 
     handler.get_level_text = get_level_text
     handler.setFormatter(logging.Formatter("[%(name)s:%(funcName)s] %(message)s", datefmt="%X"))
 
-    # Get the root logger
-    root_logger = logging.getLogger()
-    root_logger.setLevel(level.upper())  # Set a base level for all logs
+    # Get the logger
+    logger = logger or logging.getLogger()
+    if level is not None:
+        logger.setLevel(level.upper())  # Set a base level for all logs
 
     # IMPORTANT: Remove any default handlers and add your new one
-    root_logger.handlers = [handler]
+    if replace_handlers:
+        logger.handlers = [handler]
+    else:
+        logger.addHandler(handler)
 
 
 def get_logger(name: str, level: str = "NOTSET") -> Logger:
