@@ -1,6 +1,12 @@
-# TinyTools
+# tinytools
 
-TinyTools is a small utility library designed to provide common functionality for use in various projects. It includes tools for handling archives, images, logging, and video processing.
+[![pre-commit.ci status](https://results.pre-commit.ci/badge/github/alex-bene/tinytools/main.svg)](https://results.pre-commit.ci/latest/github/alex-bene/tinytools/main)
+[![Development Status](https://img.shields.io/badge/status-beta-orange)](https://github.com/alex-bene/tinytools)
+[![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+A small utility library designed to provide common functionality for use in various projects. It includes tools for handling archives, images, logging, and video processing.
 
 ## Features
 
@@ -11,9 +17,15 @@ TinyTools is a small utility library designed to provide common functionality fo
 
 ## Installation
 
+You can install `tinytools` directly from GitHub:
+
 ```bash
 pip install git+https://github.com/alex-bene/tinytools.git
-# or
+```
+
+Or if you are using `uv`:
+
+```bash
 uv add git+https://github.com/alex-bene/tinytools.git
 ```
 
@@ -68,10 +80,36 @@ frames = load_video("input.mp4")
 save_video(frames, "output.mp4", fps=30.0)
 ```
 
+## Development
+
+To contribute to this project, please ensure you have `uv` installed.
+
+1. Clone the repository:
+
+   ```bash
+   git clone https://github.com/alex-bene/tinyvis.git
+   cd tinyvis
+   ```
+
+2. Install dependencies and pre-commit hooks:
+
+   ```bash
+   uv sync
+   uv run pre-commit install
+   ```
+
+3. Run checks manually (optional):
+   ```bash
+   uv run ruff check
+   uv run ruff format
+   ```
+
+This project uses [Ruff](https://github.com/astral-sh/ruff) for linting and formatting. We use [pre-commit](https://pre-commit.com/) hooks to ensure code quality.
+
+- **Local**: Hooks run before every commit (requires `pre-commit install`).
+- **GitHub Actions**: Runs on every push to **auto-fix** issues on all branches.
+- **pre-commit.ci**: Runs on every push to **check** code quality (fixes are handled by the GitHub Action).
+
 ## License
 
 This project is licensed under the [MIT License](LICENSE).
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.

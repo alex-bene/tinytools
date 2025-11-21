@@ -1,0 +1,23 @@
+name: Pre-commit Auto-fix
+
+on:
+  push:
+
+jobs:
+  pre-commit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+      - uses: pre-commit/action@v3.0.1
+      - name: Commit changes
+        if: failure()
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git commit -am "[github-actions] pre-commit fixes"
+          git push

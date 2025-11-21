@@ -13,13 +13,16 @@ ignore = [
     "COM812",
     "COM819",
     "D107",
+    "D203",
     "D206",
+    "D213",
     "D300",
     "E111",
     "E114",
     "E117",
     "FBT001",
     "FBT002",
+    "FIX002",
     "N806",
     "N812",
     "PLR0913",
@@ -60,6 +63,9 @@ ignore = [
     "F401",   # imported but unused
 ]
 
+[lint.isort]
+split-on-trailing-comma = false
 
 [format]
 skip-magic-trailing-comma = true
+docstring-code-format = true

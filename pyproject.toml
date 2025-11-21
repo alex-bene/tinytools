@@ -31,6 +31,9 @@ llm = [
 ]
 3d = ["torch", "pytorch3d", "trimesh"]
 
+[dependency-groups]
+dev = ["ruff>=0.13.3", "pre-commit>=3.7.1"]
+
 [build-system]
 requires = ["uv_build>=0.8.2,<0.9.0"]
 build-backend = "uv_build"
