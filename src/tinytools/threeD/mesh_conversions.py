@@ -27,7 +27,7 @@ except ImportError as e:
 logger = get_logger(__name__)
 
 
-def to_trimesh(meshes: Meshes) -> list[Trimesh]:
+def pt3d_to_trimesh(meshes: Meshes) -> list[Trimesh]:
     """Convert PyTorch3D Meshes objects to Trimesh objects.
 
     This function handles different texture types (vertex colors, atlas colors) and correctly extracts vertex and

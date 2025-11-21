@@ -6,6 +6,7 @@ from .camera import focal_to_fov, fov_to_focal
 from .image import image_grid, img_from_array, imgs_from_array_batch
 from .imports import module_from_obj
 from .logger import get_logger, setup_prettier_logger
+from .metaclasses import FrozenNamespaceMeta
 from .process_annotations import bbox_center, pad_bboxes, process_bboxes, process_seg_masks
 from .suppressors import suppress_logging, suppress_output, suppress_tqdm
 from .tqdm import setup_prettier_tqdm
@@ -13,12 +14,14 @@ from .transforms import resize
 from .video import get_video_fps, load_video, load_videos, save_video
 
 if TYPE_CHECKING:
-    from .meshes import to_trimesh
+    from .threeD import CoordinateConversions, pt3d_to_trimesh, transform_meshes
     from .vlm.litellm import LiteLLMModel
     from .vlm.openai import OpenAIAPIModel
     from .vlm.vllm import VLLMModel
 
 __all__ = [
+    "CoordinateConversions",
+    "FrozenNamespaceMeta",
     "LiteLLMModel",
     "OpenAIAPIModel",
     "VLLMModel",
@@ -36,6 +39,7 @@ __all__ = [
     "pad_bboxes",
     "process_bboxes",
     "process_seg_masks",
+    "pt3d_to_trimesh",
     "resize",
     "safe_tar_extract_all",
     "safe_zip_extract_all",
@@ -45,7 +49,7 @@ __all__ = [
     "suppress_logging",
     "suppress_output",
     "suppress_tqdm",
-    "to_trimesh",
+    "transform_meshes",
 ]
 
 # An internal mapping from the public name to its source module.
@@ -53,7 +57,9 @@ _LAZY_MAPPING = {
     "LiteLLMModel": ".vlm.litellm",
     "VLLMModel": ".vlm.vllm",
     "OpenAIAPIModel": ".vlm.openai",
-    "to_trimesh": ".meshes",
+    "pt3d_to_trimesh": ".threeD.mesh_conversions",
+    "transform_meshes": ".threeD.transforms",
+    "CoordinateConversions": ".threeD.coordinate_converions",
 }
 
 
