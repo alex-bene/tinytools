@@ -31,3 +31,17 @@ class CoordinateConversions(metaclass=FrozenNamespaceMeta):
             [0.0, 0.0, -1.0],  # Flip Z (backward to forward)
         ]
     )
+    cv_to_pt3d = np.array(
+        [
+            [-1.0, 0.0, 0.0],  # Flip X (right to left)
+            [0.0, -1.0, 0.0],  # Flip Y (top to bottom)
+            [0.0, 0.0, 1.0],
+        ]
+    )
+    pt3d_to_cv = np.array(
+        [
+            [-1.0, 0.0, 0.0],  # Flip X (left to right)
+            [0.0, -1.0, 0.0],  # Flip Y (bottom to top)
+            [0.0, 0.0, 1.0],
+        ]
+    )
