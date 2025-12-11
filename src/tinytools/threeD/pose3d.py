@@ -84,7 +84,7 @@ class Pose3D:
 
         return matrix
 
-    def change_basis(self, conversion_matrix: ndarray | Tensor, inplace: bool = False) -> Pose3D | None:
+    def change_basis(self, conversion_matrix: ndarray | Tensor, inplace: bool = False) -> Pose3D:
         """Transform the pose into a new coordinate system using a change-of-basis matrix.
 
         This method applies a similarity transformation to the rotation and transforms the translation vector into the
@@ -95,10 +95,10 @@ class Pose3D:
             inplace: If True, modifies the current instance. If False, returns a new Pose3D instance.
 
         Returns:
-            A new Pose3D instance represented in the new coordinate system.
+            Pose3D: The transformed pose.
 
         Raises:
-            ValueError: If the conversion_matrix is not of shape (3, 3).
+            ValueError: If the conversion_matrix is not of shape (3, 3) or not orthogonal.
 
         """
         if conversion_matrix.shape != (3, 3):
@@ -115,4 +115,24 @@ class Pose3D:
 
         self.rotation = rotation
         self.translation = translation
-        return None
+        return self
+
+    def inverse(self, inplace: bool = False) -> Pose3D:
+        """Return the inverse of the pose.
+
+        Args:
+            inplace: If True, modifies the current instance. If False, returns a new Pose3D instance.
+
+        Returns:
+            Pose3D: The inverse pose.
+
+        """
+        rotation_inv = self.rotation.mT
+        translation_inv = -self.translation @ rotation_inv
+
+        if not inplace:
+            return Pose3D(rotation=rotation_inv, translation=translation_inv)
+
+        self.rotation = rotation_inv
+        self.translation = translation_inv
+        return self
