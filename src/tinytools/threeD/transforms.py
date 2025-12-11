@@ -9,8 +9,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from pytorch3d.structures import Meshes
-    from pytorch3d.transforms import Transform3d
+    from pytorch3d.structures import Meshes  # pyright: ignore[reportMissingImports]
+    from pytorch3d.transforms import Transform3d  # pyright: ignore[reportMissingImports]
 
 
 def transform_meshes(meshes: Meshes, transform: Transform3d, inplace: bool = False) -> Meshes:

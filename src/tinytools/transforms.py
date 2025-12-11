@@ -57,7 +57,7 @@ def resize(  # noqa: PLR0912
     resized_annotations = {}
     # Scale bounding box coordinates
     if (
-        not module_available("torch", "`torch` is required for depth interpolation. Return depth as None.")
+        not module_available("torch", log_warning="`torch` is required for depth interpolation. Return depth as None.")
         and depth is not None
     ):
         resized_annotations["depth"] = None

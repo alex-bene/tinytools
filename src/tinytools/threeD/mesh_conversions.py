@@ -10,18 +10,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from tinytools import get_logger
+from tinytools.imports import requires
 
-try:
-    import torch
-    from pytorch3d.renderer import TexturesAtlas, TexturesVertex
-    from trimesh import Trimesh
-
-    if TYPE_CHECKING:
-        from pytorch3d.structures import Meshes
-except ImportError as e:
-    msg = '3D features are not available. Please install the required dependencies with: pip install "tinytools[3d]"'
-    raise ImportError(msg) from e
-
+if TYPE_CHECKING:
+    from pytorch3d.structures import Meshes  # pyright: ignore[reportMissingImports]
+    from trimesh import Trimesh  # pyright: ignore[reportMissingImports]
 
 # Initialize a logger
 logger = get_logger(__name__)
@@ -43,6 +36,17 @@ def pt3d_to_trimesh(meshes: Meshes) -> list[Trimesh]:
         NotImplementedError: If the texture type is TexturesUV.
 
     """
+    requires(
+        ["pytorch3d", "trimesh"],
+        '3D features are not available. Please install the required dependencies with: pip install "tinytools[3d]"',
+    )
+    import torch  # pyright: ignore[reportMissingImports]  # noqa: PLC0415
+    from pytorch3d.renderer import (  # pyright: ignore[reportMissingImports]  # noqa: PLC0415
+        TexturesAtlas,
+        TexturesVertex,
+    )
+    from trimesh import Trimesh  # pyright: ignore[reportMissingImports]  # noqa: PLC0415
+
     trimeshes = []
 
     for idx, (verts, faces) in enumerate(zip(meshes.verts_list(), meshes.faces_list(), strict=True)):
