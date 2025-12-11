@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import contextlib
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import numpy as np
 from PIL import Image
@@ -11,12 +11,10 @@ from PIL import Image
 from .imports import module_available
 
 with contextlib.suppress(ImportError):
-    import torch
+    import torch  # pyright: ignore[reportMissingImports]
 
 if TYPE_CHECKING:
-    from torch import Tensor
-else:
-    Tensor = Any
+    from torch import Tensor  # pyright: ignore[reportMissingImports]
 
 
 def resize(  # noqa: PLR0912
