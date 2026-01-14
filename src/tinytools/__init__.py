@@ -9,7 +9,7 @@ from .logger import get_logger, setup_prettier_logger
 from .metaclasses import FrozenNamespaceMeta
 from .process_annotations import bbox_center, pad_bboxes, process_bboxes, process_seg_masks
 from .suppressors import suppress_logging, suppress_output, suppress_tqdm
-from .torch import freeze_model
+from .torch import freeze_module
 from .tqdm import setup_prettier_tqdm
 from .transforms import resize
 from .video import get_video_fps, load_video, load_videos, save_video
@@ -30,7 +30,7 @@ __all__ = [
     "bbox_center",
     "focal_to_fov",
     "fov_to_focal",
-    "freeze_model",
+    "freeze_module",
     "get_logger",
     "get_video_fps",
     "image_grid",
