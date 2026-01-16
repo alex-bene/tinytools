@@ -23,7 +23,8 @@ class FFBlock(nn.Module):
     Args:
         input_dim (int): Input feature dimension for the normalization layer.
         hidden_dim (int): Hidden layer dimension for the MLP.
-        output_dim (int): Output feature dimension for the MLP.
+        output_dim (int | None, optional): Output feature dimension for the MLP. If None, defaults to input_dim.
+            Defaults to None.
         bias (bool, optional): Whether to use bias in linear layers of the MLP. Defaults to True.
         dropout (float, optional): Dropout probability in the MLP. Defaults to 0.0.
         mlp_type (Literal["gated", "vanilla"], optional): Type of MLP to use ("gated" or "vanilla").
@@ -41,7 +42,7 @@ class FFBlock(nn.Module):
         self,
         input_dim: int,
         hidden_dim: int,
-        output_dim: int,
+        output_dim: int | None = None,
         bias: bool = True,
         dropout: float = 0.0,
         mlp_type: Literal["gated", "vanilla"] = "gated",
@@ -57,7 +58,7 @@ class FFBlock(nn.Module):
         mlp_kwargs = {
             "input_dim": input_dim,
             "hidden_dim": hidden_dim,
-            "output_dim": output_dim,
+            "output_dim": output_dim if output_dim is not None else input_dim,
             "bias": bias,
             "dropout": dropout,
             "activation_fn": activation_fn,
