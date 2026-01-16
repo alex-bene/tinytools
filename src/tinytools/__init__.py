@@ -9,24 +9,27 @@ from .logger import get_logger, setup_prettier_logger
 from .metaclasses import FrozenNamespaceMeta
 from .process_annotations import bbox_center, pad_bboxes, process_bboxes, process_seg_masks
 from .suppressors import suppress_logging, suppress_output, suppress_tqdm
-from .torch import freeze_module
 from .tqdm import setup_prettier_tqdm
 from .transforms import resize
 from .video import get_video_fps, load_video, load_videos, save_video
 
 if TYPE_CHECKING:
     from .threeD import CoordinateConversions, Pose3D, pt3d_to_trimesh, transform_meshes
+    from .torch import FFBlock, GatedMLP, VanillaMLP, freeze_module
     from .vlm.litellm import LiteLLMModel
     from .vlm.openai import OpenAIAPIModel
     from .vlm.vllm import VLLMModel
 
 __all__ = [
     "CoordinateConversions",
+    "FFBlock",
     "FrozenNamespaceMeta",
+    "GatedMLP",
     "LiteLLMModel",
     "OpenAIAPIModel",
     "Pose3D",
     "VLLMModel",
+    "VanillaMLP",
     "bbox_center",
     "focal_to_fov",
     "fov_to_focal",
@@ -66,6 +69,10 @@ _LAZY_MAPPING = {
     "transform_meshes": ".threeD.transforms",
     "CoordinateConversions": ".threeD.coordinate_conversions",
     "Pose3D": ".threeD.pose3d",
+    "GatedMLP": ".torch.modules.gated_mlp",
+    "PreNormBlock": ".torch.modules.prenorm_block",
+    "VanillaMLP": ".torch.modules.vanilla_mlp",
+    "freeze_module": ".torch.utils",
 }
 
 
