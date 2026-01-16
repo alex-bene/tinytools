@@ -15,12 +15,13 @@ from .video import get_video_fps, load_video, load_videos, save_video
 
 if TYPE_CHECKING:
     from .threeD import CoordinateConversions, Pose3D, pt3d_to_trimesh, transform_meshes
-    from .torch import FFBlock, GatedMLP, VanillaMLP, freeze_module
+    from .torch import ConstantLayer, FFBlock, GatedMLP, VanillaMLP, freeze_module
     from .vlm.litellm import LiteLLMModel
     from .vlm.openai import OpenAIAPIModel
     from .vlm.vllm import VLLMModel
 
 __all__ = [
+    "ConstantLayer",
     "CoordinateConversions",
     "FFBlock",
     "FrozenNamespaceMeta",
