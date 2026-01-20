@@ -14,24 +14,58 @@ from .transforms import resize
 from .video import get_video_fps, load_video, load_videos, save_video
 
 if TYPE_CHECKING:
-    from .threeD import CoordinateConversions, Pose3D, pt3d_to_trimesh, transform_meshes
-    from .torch import ConstantLayer, FFBlock, GatedMLP, VanillaMLP, freeze_module
+    from .threeD import (
+        ApparentSize,
+        CoordinateConversions,
+        DecomposedTransform,
+        DisparitySpace,
+        Identity,
+        LogarithmicDisparitySpace,
+        Naive,
+        NormalizedSceneScale,
+        NormalizedSceneScaleAndTranslation,
+        Pose3D,
+        PoseTarget,
+        PoseTargetFactory,
+        ScaleShiftInvariant,
+        ScaleShiftInvariantWTranslationScale,
+        compose_transform,
+        decompose_transform,
+        pt3d_to_trimesh,
+        transform_meshes,
+    )
+    from .torch import ConstantLayer, FFBlock, GatedMLP, LocationHead, VanillaMLP, freeze_module
     from .vlm.litellm import LiteLLMModel
     from .vlm.openai import OpenAIAPIModel
     from .vlm.vllm import VLLMModel
 
 __all__ = [
+    "ApparentSize",
     "ConstantLayer",
     "CoordinateConversions",
+    "DecomposedTransform",
+    "DisparitySpace",
     "FFBlock",
     "FrozenNamespaceMeta",
     "GatedMLP",
+    "Identity",
     "LiteLLMModel",
+    "LocationHead",
+    "LogarithmicDisparitySpace",
+    "Naive",
+    "NormalizedSceneScale",
+    "NormalizedSceneScaleAndTranslation",
     "OpenAIAPIModel",
     "Pose3D",
+    "PoseTarget",
+    "PoseTargetFactory",
+    "ScaleShiftInvariant",
+    "ScaleShiftInvariantWTranslationScale",
     "VLLMModel",
     "VanillaMLP",
     "bbox_center",
+    "compose_transform",
+    "decompose_transform",
     "focal_to_fov",
     "fov_to_focal",
     "freeze_module",
@@ -68,12 +102,27 @@ _LAZY_MAPPING = {
     "OpenAIAPIModel": ".vlm.openai",
     "pt3d_to_trimesh": ".threeD.mesh_conversions",
     "transform_meshes": ".threeD.transforms",
+    "decompose_transform": ".threeD.transforms",
+    "compose_transform": ".threeD.transforms",
+    "DecomposedTransform": ".threeD.transforms",
     "CoordinateConversions": ".threeD.coordinate_conversions",
     "Pose3D": ".threeD.pose3d",
     "GatedMLP": ".torch.modules.gated_mlp",
     "PreNormBlock": ".torch.modules.prenorm_block",
     "VanillaMLP": ".torch.modules.vanilla_mlp",
     "freeze_module": ".torch.utils",
+    "LocationHead": ".torch.modules.location_head",
+    "ApparentSize": ".threeD.pose_target",
+    "DisparitySpace": ".threeD.pose_target",
+    "Identity": ".threeD.pose_target",
+    "LogarithmicDisparitySpace": ".threeD.pose_target",
+    "Naive": ".threeD.pose_target",
+    "NormalizedSceneScale": ".threeD.pose_target",
+    "NormalizedSceneScaleAndTranslation": ".threeD.pose_target",
+    "PoseTarget": ".threeD.pose_target",
+    "PoseTargetFactory": ".threeD.pose_target",
+    "ScaleShiftInvariant": ".threeD.pose_target",
+    "ScaleShiftInvariantWTranslationScale": ".threeD.pose_target",
 }
 
 
