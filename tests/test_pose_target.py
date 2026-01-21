@@ -13,6 +13,7 @@ from src.tinytools.threeD.pose_target import (
     Naive,
     NormalizedSceneScale,
     NormalizedSceneScaleAndTranslation,
+    PoseTarget,
     ScaleShiftInvariant,
     ScaleShiftInvariantWTranslationScale,
 )
@@ -32,6 +33,38 @@ def instance_pose(request: pytest.FixtureRequest) -> InstancePose:
         scene_scale=torch.rand(*dim_sizes, 1) * 15 + eps,
         scene_shift=torch.rand(*dim_sizes, 3) * 15 + eps,
     )
+
+
+def test_pose_target_defaults() -> None:
+    """Test PoseTarget base class instantiation."""
+    translation = torch.rand(5, 4, 2, 3) * 15
+    pose_target = PoseTarget(translation=translation)
+    pose_target_explicit = PoseTarget(
+        rotation=torch.eye(3).expand(5, 4, 2, 3, 3),
+        translation=translation,
+        scale=torch.ones(5, 4, 2, 1),
+        scene_center=torch.zeros(5, 4, 2, 3),
+        scene_scale=torch.ones(5, 4, 2, 1),
+        translation_scale=torch.ones(5, 4, 2, 1),
+        scene_translation_scale=torch.ones(5, 4, 2, 1),
+    )
+
+    assert pose_target == pose_target_explicit
+
+
+def test_instance_pose_defaults() -> None:
+    """Test PoseTarget base class instantiation."""
+    translation = torch.rand(5, 4, 2, 3) * 15
+    instance_pose = InstancePose(translation=translation)
+    instance_pose_explicit = InstancePose(
+        rotation=torch.eye(3).expand(5, 4, 2, 3, 3),
+        translation=translation,
+        scale=torch.ones(5, 4, 2, 1),
+        scene_shift=torch.zeros(5, 4, 2, 3),
+        scene_scale=torch.ones(5, 4, 2, 1),
+    )
+
+    assert instance_pose == instance_pose_explicit
 
 
 def test_invariant_pose_target(instance_pose: InstancePose) -> None:
@@ -63,8 +96,8 @@ def test_normalized_scene_scale_pose_target(instance_pose: InstancePose) -> None
     assert torch.allclose(pose_target.scale, invariant_pose_target.s_rel)
     assert torch.allclose(pose_target.rotation, invariant_pose_target.q)
     assert torch.allclose(pose_target.translation, invariant_pose_target.t_unit * invariant_pose_target.t_rel_norm)
-    assert torch.allclose(pose_target.translation_scale, torch.zeros_like(pose_target.translation_scale))
-    assert torch.allclose(pose_target.scene_translation_scale, torch.zeros_like(pose_target.scene_translation_scale))
+    assert torch.allclose(pose_target.translation_scale, torch.ones_like(pose_target.translation_scale))
+    assert torch.allclose(pose_target.scene_translation_scale, torch.ones_like(pose_target.scene_translation_scale))
     assert torch.allclose(pose_target.scene_scale, invariant_pose_target.s_scene)
     assert torch.allclose(pose_target.scene_center, invariant_pose_target.t_scene_center)
 
@@ -83,8 +116,8 @@ def test_naive_pose_target(instance_pose: InstancePose) -> None:
     assert torch.allclose(pose_target.scale, invariant_pose_target.s_scene * invariant_pose_target.s_rel)
     assert torch.allclose(pose_target.rotation, invariant_pose_target.q)
     assert torch.allclose(pose_target.translation, invariant_pose_target.t_unit * invariant_pose_target.t_rel_norm)
-    assert torch.allclose(pose_target.translation_scale, torch.zeros_like(pose_target.translation_scale))
-    assert torch.allclose(pose_target.scene_translation_scale, torch.zeros_like(pose_target.scene_translation_scale))
+    assert torch.allclose(pose_target.translation_scale, torch.ones_like(pose_target.translation_scale))
+    assert torch.allclose(pose_target.scene_translation_scale, torch.ones_like(pose_target.scene_translation_scale))
     assert torch.allclose(pose_target.scene_scale, invariant_pose_target.s_scene)
     assert torch.allclose(pose_target.scene_center, invariant_pose_target.t_scene_center)
 
@@ -104,7 +137,7 @@ def test_normalized_scene_scale_and_translation_pose_target(instance_pose: Insta
     assert torch.allclose(pose_target.rotation, invariant_pose_target.q)
     assert torch.allclose(pose_target.translation, invariant_pose_target.t_unit)
     assert torch.allclose(pose_target.translation_scale, invariant_pose_target.t_rel_norm)
-    assert torch.allclose(pose_target.scene_translation_scale, torch.zeros_like(pose_target.scene_translation_scale))
+    assert torch.allclose(pose_target.scene_translation_scale, torch.ones_like(pose_target.scene_translation_scale))
     assert torch.allclose(pose_target.scene_scale, invariant_pose_target.s_scene)
     assert torch.allclose(pose_target.scene_center, invariant_pose_target.t_scene_center)
 
@@ -124,7 +157,7 @@ def test_apparent_size_pose_target(instance_pose: InstancePose) -> None:
     assert torch.allclose(pose_target.rotation, invariant_pose_target.q)
     assert torch.allclose(pose_target.translation, invariant_pose_target.t_unit)
     assert torch.allclose(pose_target.translation_scale, invariant_pose_target.t_rel_norm)
-    assert torch.allclose(pose_target.scene_translation_scale, torch.zeros_like(pose_target.scene_translation_scale))
+    assert torch.allclose(pose_target.scene_translation_scale, torch.ones_like(pose_target.scene_translation_scale))
     assert torch.allclose(pose_target.scene_scale, invariant_pose_target.s_scene)
     assert torch.allclose(pose_target.scene_center, invariant_pose_target.t_scene_center)
 
@@ -142,8 +175,8 @@ def test_identity_pose_target(instance_pose: InstancePose) -> None:
     assert torch.allclose(pose_target.scale, instance_pose.scale)
     assert torch.allclose(pose_target.rotation, instance_pose.rotation)
     assert torch.allclose(pose_target.translation, instance_pose.translation)
-    assert torch.allclose(pose_target.translation_scale, torch.zeros_like(pose_target.translation_scale))
-    assert torch.allclose(pose_target.scene_translation_scale, torch.zeros_like(pose_target.scene_translation_scale))
+    assert torch.allclose(pose_target.translation_scale, torch.ones_like(pose_target.translation_scale))
+    assert torch.allclose(pose_target.scene_translation_scale, torch.ones_like(pose_target.scene_translation_scale))
     assert torch.allclose(pose_target.scene_scale, instance_pose.scene_scale)
     assert torch.allclose(pose_target.scene_center, instance_pose.scene_shift)
 

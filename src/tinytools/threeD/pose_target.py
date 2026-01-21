@@ -108,11 +108,22 @@ class InstancePose:  # noqa: PLW1641
 
     """
 
-    scale: torch.Tensor
-    rotation: torch.Tensor
     translation: torch.Tensor
-    scene_scale: torch.Tensor
-    scene_shift: torch.Tensor
+    scale: torch.Tensor | None = None
+    rotation: torch.Tensor | None = None
+    scene_scale: torch.Tensor | None = None
+    scene_shift: torch.Tensor | None = None
+
+    def __post_init__(self) -> None:
+        """Complete missing fields with default values."""
+        if self.scale is None:
+            self.scale = torch.ones_like(self.translation[..., :1])
+        if self.rotation is None:
+            self.rotation = torch.eye(3, device=self.translation.device).expand(*self.translation.shape[:-1], 3, 3)
+        if self.scene_scale is None:
+            self.scene_scale = torch.ones_like(self.translation[..., :1])
+        if self.scene_shift is None:
+            self.scene_shift = torch.zeros_like(self.translation)
 
     def __eq__(self, other: object, rtol: float = 1e-5, atol: float = 1e-5) -> bool:
         """Check equality between two PoseTarget instances."""
@@ -363,16 +374,31 @@ class PoseTarget:  # noqa: PLW1641
 
     """
 
-    scale: torch.Tensor
-    rotation: torch.Tensor
     translation: torch.Tensor
-    scene_scale: torch.Tensor
-    scene_center: torch.Tensor
-    scene_translation_scale: torch.Tensor
-    translation_scale: torch.Tensor
+    scale: torch.Tensor | None = None
+    rotation: torch.Tensor | None = None
+    scene_scale: torch.Tensor | None = None
+    scene_center: torch.Tensor | None = None
+    scene_translation_scale: torch.Tensor | None = None
+    translation_scale: torch.Tensor | None = None
     pose_target_convention: str = field(default="unknown")
 
     """Convert between pose_target <-> instance_pose <-> invariant_pose_target."""
+
+    def __post_init__(self) -> None:
+        """Complete missing fields with default values."""
+        if self.scale is None:
+            self.scale = torch.ones_like(self.translation[..., :1])
+        if self.rotation is None:
+            self.rotation = torch.eye(3, device=self.translation.device).expand(*self.translation.shape[:-1], 3, 3)
+        if self.scene_scale is None:
+            self.scene_scale = torch.ones_like(self.translation[..., :1])
+        if self.scene_center is None:
+            self.scene_center = torch.zeros_like(self.translation)
+        if self.translation_scale is None:
+            self.translation_scale = torch.ones_like(self.translation[..., :1])
+        if self.scene_translation_scale is None:
+            self.scene_translation_scale = torch.ones_like(self.translation[..., :1])
 
     @classmethod
     def from_invariant(cls, _: InvariantPoseTarget) -> PoseTarget:
@@ -428,6 +454,7 @@ class ScaleShiftInvariant(PoseTarget):
     def __post_init__(self) -> None:
         """Ensure pytorch3d is available."""
         requires("pytorch3d", "-> ScaleShiftInvariant")
+        super().__post_init__()
 
     @classmethod
     def from_instance_pose(cls, instance_pose: InstancePose, normalize: bool = False) -> ScaleShiftInvariant:
@@ -456,8 +483,6 @@ class ScaleShiftInvariant(PoseTarget):
             translation=ssi_translation,
             scene_scale=scene_scale,
             scene_center=scene_shift,
-            translation_scale=torch.zeros_like(ssi_scale)[..., 0].unsqueeze(-1),
-            scene_translation_scale=torch.zeros_like(ssi_scale)[..., 0].unsqueeze(-1),
             pose_target_convention=cls.pose_target_convention,
         )
 
@@ -745,8 +770,6 @@ class NormalizedSceneScale(PoseTarget):
             translation=translation,
             scene_scale=invariant_targets.s_scene,
             scene_center=invariant_targets.t_scene_center,
-            translation_scale=torch.zeros_like(invariant_targets.t_rel_norm),
-            scene_translation_scale=torch.zeros_like(invariant_targets.t_scene_center),
             pose_target_convention=cls.pose_target_convention,
         )
 
@@ -781,8 +804,6 @@ class Naive(PoseTarget):
             translation=translation,
             scene_scale=invariant_targets.s_scene,
             scene_center=invariant_targets.t_scene_center,
-            translation_scale=torch.zeros_like(invariant_targets.t_rel_norm),
-            scene_translation_scale=torch.zeros_like(invariant_targets.t_scene_center),
             pose_target_convention=cls.pose_target_convention,
         )
 
@@ -817,7 +838,6 @@ class NormalizedSceneScaleAndTranslation(PoseTarget):
             scene_scale=invariant_targets.s_scene,
             scene_center=invariant_targets.t_scene_center,
             translation_scale=invariant_targets.t_rel_norm,
-            scene_translation_scale=torch.zeros_like(invariant_targets.t_scene_center),
             pose_target_convention=cls.pose_target_convention,
         )
 
@@ -851,7 +871,6 @@ class ApparentSize(PoseTarget):
             scene_scale=invariant_targets.s_scene,
             scene_center=invariant_targets.t_scene_center,
             translation_scale=invariant_targets.t_rel_norm,
-            scene_translation_scale=torch.zeros_like(invariant_targets.t_scene_center),
             pose_target_convention=cls.pose_target_convention,
         )
 
@@ -885,8 +904,6 @@ class Identity(PoseTarget):
             translation=instance_pose.translation,
             scene_scale=instance_pose.scene_scale,
             scene_center=instance_pose.scene_shift,
-            translation_scale=torch.zeros_like(instance_pose.scale),
-            scene_translation_scale=torch.zeros_like(instance_pose.scene_scale),
             pose_target_convention=cls.pose_target_convention,
         )
 
@@ -912,7 +929,7 @@ class Identity(PoseTarget):
         return cls.from_instance_pose(instance_pose)
 
 
-PoseTargetFactory = {
+PoseTargetFactory: dict[str, type[PoseTarget]] = {
     "ScaleShiftInvariant": ScaleShiftInvariant,
     "ScaleShiftInvariantWTranslationScale": ScaleShiftInvariantWTranslationScale,
     "DisparitySpace": DisparitySpace,
