@@ -1,16 +1,16 @@
 """Pose Target Representations for 3D Object Pose Estimation.
 
-| Convention Name                      | scale   | translation         | translation_scale   | scene_translation_scale |
-|--------------------------------------+---------+---------------------+---------------------+-------------------------|
-| Identity                             | s       | t                   | 1.0                 | 1.0                     |
-| Naive                                | s       | t_rel               | 1.0                 | 1.0                     |
-| ApparentSize                         | s_tilde | t_unit              | t_rel_norm          | 1.0                     |
-| NormalizedSceneScale                 | s_rel   | t_rel               | 1.0                 | 1.0                     |
-| NormalizedSceneScaleAndTranslation   | s_rel   | t_unit              | t_rel_norm          | 1.0                     |
-| ScaleShiftInvariant                  | s / Ss  | (t - Ts) / Ss       | 1.0                 | 1.0                     |
-| ScaleShiftInvariantWTranslationScale | s / Ss  | unit((t - Ts) / Ss) | norm((t - Ts) / Ss) | 1.0                     |
-| DisparitySpace                       | s / Ss  | (t / Z) - (Ts / Zs) | (Z - Zs) / Zs       | 1 / Zs                  |
-| LogarithmicDisparitySpace            | s / Ss  | (t / Z) - (Ts / Zs) | log(Z) - log(Zs)    | log(Zs)                 |
+| Convention Name                      | scale   | translation         | translation_scale   |
+|--------------------------------------+---------+---------------------+---------------------|
+| Identity                             | s       | t                   | 1.0                 |
+| Naive                                | s       | t_rel               | 1.0                 |
+| ApparentSize                         | s_tilde | t_unit              | t_rel_norm          |
+| NormalizedSceneScale                 | s_rel   | t_rel               | 1.0                 |
+| NormalizedSceneScaleAndTranslation   | s_rel   | t_unit              | t_rel_norm          |
+| ScaleShiftInvariant                  | s / Ss  | (t - Ts) / Ss       | 1.0                 |
+| ScaleShiftInvariantWTranslationScale | s / Ss  | unit((t - Ts) / Ss) | norm((t - Ts) / Ss) |
+| DisparitySpace                       | s / Ss  | (t / Z) - (Ts / Zs) | (Z - Zs) / Zs       |
+| LogarithmicDisparitySpace            | s / Ss  | (t / Z) - (Ts / Zs) | log(Z) - log(Zs)    |
 
 Adapted from SAM3D Object
 """
@@ -36,6 +36,11 @@ if TYPE_CHECKING:
     from pytorch3d.transforms import Transform3d  # pyright: ignore[reportMissingImports]
 
 logger = get_logger(__name__)
+
+
+def get_zero_safe_values(tensor: torch.Tensor, eps: float) -> torch.Tensor:
+    """Replace values in tensor that are close to zero with +/- eps."""
+    return torch.where(tensor.abs() < eps, eps * torch.sign(tensor).add(tensor == 0), tensor)
 
 
 def get_scale_and_shift(pointmap: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -379,9 +384,8 @@ class PoseTarget:  # noqa: PLW1641
     rotation: torch.Tensor | None = None
     scene_scale: torch.Tensor | None = None
     scene_center: torch.Tensor | None = None
-    scene_translation_scale: torch.Tensor | None = None
     translation_scale: torch.Tensor | None = None
-    pose_target_convention: str = field(default="unknown")
+    pose_target_convention: str = field(default="unknown", init=False)
 
     """Convert between pose_target <-> instance_pose <-> invariant_pose_target."""
 
@@ -397,8 +401,6 @@ class PoseTarget:  # noqa: PLW1641
             self.scene_center = torch.zeros_like(self.translation)
         if self.translation_scale is None:
             self.translation_scale = torch.ones_like(self.translation[..., :1])
-        if self.scene_translation_scale is None:
-            self.scene_translation_scale = torch.ones_like(self.translation[..., :1])
 
     @classmethod
     def from_invariant(cls, _: InvariantPoseTarget) -> PoseTarget:
@@ -433,7 +435,6 @@ class PoseTarget:  # noqa: PLW1641
             and torch.allclose(self.scene_scale, other.scene_scale, rtol=rtol, atol=atol)
             and torch.allclose(self.scene_center, other.scene_center, rtol=rtol, atol=atol)
             and torch.allclose(self.translation_scale, other.translation_scale, rtol=rtol, atol=atol)
-            and torch.allclose(self.scene_translation_scale, other.scene_translation_scale, rtol=rtol, atol=atol)
             and self.pose_target_convention == other.pose_target_convention
         )
 
@@ -483,7 +484,6 @@ class ScaleShiftInvariant(PoseTarget):
             translation=ssi_translation,
             scene_scale=scene_scale,
             scene_center=scene_shift,
-            pose_target_convention=cls.pose_target_convention,
         )
 
     def to_instance_pose(self, normalize: bool = False) -> InstancePose:
@@ -589,68 +589,70 @@ class DisparitySpace(PoseTarget):
     """Disparity Space Pose Target Representation.
 
     Basically, x and y are divided by depth (z) and depth is stored as 1/z.
-    For this representation we use `scene_translation_scale` to store 1/Zs such that
-    `scene_translation_scale * scene_shift` gets as the actual scene center. Similarly, `translation_scale` is
-    1/depth such that `translation_scale` gives the actual depth and `translation_scale * translation`
+    For this representation we use `translation_scale` to store 1/depth such that `translation_scale * translation`
     gives the actual object xyz.
     """
 
     pose_target_convention: str = "DisparitySpace"
-    eps: float = 1e-6
+    eps: float = 1e-6  # for safe division
+
+    def __post_init__(self) -> None:
+        """Ensure scene_center is set."""
+        if self.scene_center is None:
+            self.scene_center = torch.zeros_like(self.translation)
+            # default scene center at [0,0,1] and pose_translation_scale = Z - 1
+            self.scene_center[..., -1] = 1.0  # default scene center at [0,0,1]
+        return super().__post_init__()
 
     @classmethod
     def from_instance_pose(cls, instance_pose: InstancePose) -> DisparitySpace:
         """Convert InstancePose to PoseTarget."""
-        # `scene_center`: [Xs/Zs, Ys/Zs, 1]
-        # `scene_translation_scale`: 1/Zs
-        # `scene_scale`: scene_scale
         # `translation`: [X/Z, Y/Z, 1] - [Xs/Zs, Ys/Zs, 1]
-        # `translation_scale`: (Z - Zs) / Zs
+        # `translation_scale`: 1 / (Z - Zs)
         # `scale`: orig_scale / scene_scale
 
-        # To uv space (i.e., divide by z) with log depth
+        # To uv space (i.e., divide by z)
         scene_shift = instance_pose.scene_shift
         scene_shift_z = scene_shift[..., -1:]
-        scene_shift = scene_shift / scene_shift_z  # [Xs/Zs, Ys/Zs, 1]
-        scene_translation_scale = torch.clamp_min(scene_shift_z, min=cls.eps).reciprocal()  # 1/Zs
+        scene_shift_uv = scene_shift / get_zero_safe_values(scene_shift_z, eps=cls.eps)  # [Xs/Zs, Ys/Zs, 1]
 
         pose_translation = instance_pose.translation
         pose_z = pose_translation[..., -1:]
-        pose_translation = pose_translation / pose_z  # [X/Z, Y/Z, 1]
-        pose_translation_scale = torch.clamp_min(pose_z, min=cls.eps).reciprocal()  # 1/Z
-
+        pose_z_safe = get_zero_safe_values(pose_z, eps=cls.eps)
+        pose_translation = pose_translation / pose_z_safe  # [X/Z, Y/Z, 1]
         # Compute relative translation and scales
-        pose_translation = pose_translation - scene_shift  # [X/Z - Xs/Zs, Y/Z - Ys/Zs, 0]
-        pose_translation_scale = (pose_z - scene_shift_z) / scene_shift_z  # (Z - Zs) / Zs
+        pose_translation -= scene_shift_uv  # [X/Z - Xs/Zs, Y/Z - Ys/Zs, 0]
+        pose_translation[..., -1] = 0.0  # enforce zero z-component
+        pose_translation_scale = scene_shift_z / pose_z_safe  # Zs / Z
 
         return DisparitySpace(
-            scale=instance_pose.scale / instance_pose.scene_scale,  # orig_scale / scene_scale
+            scale=instance_pose.scale / get_zero_safe_values(instance_pose.scene_scale, eps=cls.eps),
             translation=pose_translation,  # [X/Z - Xs/Zs, Y/Z - Ys/Zs, 0]
-            translation_scale=pose_translation_scale,  # (Z - Zs) / Zs
+            translation_scale=pose_translation_scale,  # Zs / Z
             rotation=instance_pose.rotation,
-            scene_center=scene_shift,  # [Xs/Zs, Ys/Zs, 1]
+            scene_center=instance_pose.scene_shift,
             scene_scale=instance_pose.scene_scale,
-            scene_translation_scale=scene_translation_scale,  # 1/Zs
-            pose_target_convention=cls.pose_target_convention,
         )
 
     def to_instance_pose(self) -> InstancePose:
         """Convert PoseTarget to InstancePose."""
-        # Recover actual scene shift
-        scene_shift_z = torch.clamp_min(self.scene_translation_scale, min=self.eps).reciprocal()  # Zs
-        scene_shift = self.scene_center * scene_shift_z  # [Xs, Ys, Zs]
+        # Calcualte displarity space scene center
+        scene_shift = self.scene_center  # [Xs, Ys, Zs]
+        scene_shift_z = scene_shift[..., -1:]
+        scene_shift_uv = scene_shift / get_zero_safe_values(scene_shift_z, eps=self.eps)  # [Xs/Zs, Ys/Zs, 1]
         # Recover instance translation
         ins_translation = self.translation.clone()  # [X/Z - Xs/Zs, Y/Z - Ys/Zs, 0]
-        ins_translation += self.scene_center  # [X/Z, Y/Z, 1]
-        ins_translation_z = (self.translation_scale * scene_shift_z) + scene_shift_z  # Z
+        ins_translation += scene_shift_uv  # [X/Z, Y/Z, 1]
+        ins_translation[..., -1] = 1.0  # enforce one z-component
+        ins_translation_z = scene_shift_z / get_zero_safe_values(self.translation_scale, eps=self.eps)  # Z
         ins_translation *= ins_translation_z  # [X, Y, Z]
 
         return InstancePose(
-            scale=self.scale * self.scene_scale,
+            scale=self.scale * get_zero_safe_values(self.scene_scale, eps=self.eps),
             translation=ins_translation,
             rotation=self.rotation,
             scene_scale=self.scene_scale,
-            scene_shift=scene_shift,
+            scene_shift=self.scene_center,
         )
 
     def to_invariant(self) -> InvariantPoseTarget:
@@ -671,72 +673,74 @@ class LogarithmicDisparitySpace(PoseTarget):
     Basically, x and y are divided by depth (z) and depth is stored as log(z). Note that `log(1/z) = -log(z)` so this is
     more or less the same as storing 1/z but log(z) is easier for NN to compute as any prediction is valid once we apply
     the exponential to get the actual depth.
-    For this representation we use `scene_translation_scale` to store log(Zs) such that
-    `exp(scene_translation_scale) * scene_shift` gets as the actual scene center. Similarly, `translation_scale` is
-    log(depth) such that `exp(translation_scale)` gives the actual depth and `exp(translation_scale) * translation`
-    gives the actual object xyz.
+    For this representation we use `translation_scale` as log(depth) such that `exp(translation_scale)` gives the
+    actual depth and `exp(translation_scale) * translation` gives the actual object xyz.
     """
 
     pose_target_convention: str = "LogarithmicDisparitySpace"
-    eps: float = 1e-6
+    eps: float = 1e-6  # for safe log and division
+
+    def __post_init__(self) -> None:
+        """Ensure scene_center is set."""
+        if self.scene_center is None:
+            self.scene_center = torch.zeros_like(self.translation)
+            # default scene center at [0,0,1]
+            # log(1) = 0 so pose_translation_scale=log(Z)
+            self.scene_center[..., -1] = 1.0
+        return super().__post_init__()
 
     @classmethod
     def from_instance_pose(cls, instance_pose: InstancePose) -> LogarithmicDisparitySpace:
         """Convert InstancePose to PoseTarget."""
-        # `scene_center`: [Xs/Zs, Ys/Zs, 1]
-        # `scene_translation_scale`: log(Zs)
-        # `scene_scale`: scene_scale
         # `translation`: [X/Z, Y/Z, 1] - [Xs/Zs, Ys/Zs, 1]
-        # `translation_scale`: log(Z) - log(Zs) = log(Z / Zs)
+        # `translation_scale`: log(Z - Zs)
         # `scale`: orig_scale / scene_scale
 
         # To uv space (i.e., divide by z) with log depth
         scene_shift = instance_pose.scene_shift
         scene_shift_z = scene_shift[..., -1:]
-        scene_shift = scene_shift / torch.clamp_min(scene_shift_z, min=cls.eps)  # [Xs/Zs, Ys/Zs, 1]
-        scene_shift[..., -1] = 1.0  # enforce one z-component
-        scene_translation_scale = torch.log(torch.clamp_min(scene_shift_z, min=cls.eps))  # log(Zs)
+        scene_shift_z_safe = get_zero_safe_values(scene_shift_z, eps=cls.eps)
+        scene_shift_uv = scene_shift / scene_shift_z_safe  # [Xs/Zs, Ys/Zs, 1]
 
         pose_translation = instance_pose.translation
         pose_z = pose_translation[..., -1:]
-        pose_translation = pose_translation / torch.clamp_min(pose_z, min=cls.eps)  # [X/Z, Y/Z, 1]
-        pose_translation[..., -1] = 1.0  # enforce one z-component
-        pose_translation_scale = torch.log(torch.clamp_min(pose_z, min=cls.eps))  # log(Z)
-
+        pose_z_safe = get_zero_safe_values(pose_z, eps=cls.eps)
+        pose_translation = pose_translation / pose_z_safe  # [X/Z, Y/Z, 1]
         # Compute relative translation and scales
-        pose_translation = pose_translation - scene_shift  # [X/Z - Xs/Zs, Y/Z - Ys/Zs, 0]
+        pose_translation -= scene_shift_uv  # [X/Z - Xs/Zs, Y/Z - Ys/Zs, 0]
         pose_translation[..., -1] = 0.0  # enforce zero z-component
-        pose_translation_scale -= scene_translation_scale  # log(Z / Zs)
+        pose_translation_scale = torch.log(pose_z_safe) - torch.log(scene_shift_z_safe)  # log(Z / Zs)
 
         return LogarithmicDisparitySpace(
-            scale=instance_pose.scale / torch.clamp_min(instance_pose.scene_scale, min=cls.eps),  # orig_scale / Ss
+            scale=instance_pose.scale / get_zero_safe_values(instance_pose.scene_scale, eps=cls.eps),  # orig_scale / Ss
             translation=pose_translation,  # [X/Z - Xs/Zs, Y/Z - Ys/Zs, 0]
             translation_scale=pose_translation_scale,  # log(Z / Zs)
             rotation=instance_pose.rotation,
-            scene_center=scene_shift,  # [Xs/Zs, Ys/Zs, 1]
+            scene_center=instance_pose.scene_shift,
             scene_scale=instance_pose.scene_scale,
-            scene_translation_scale=scene_translation_scale,  # log(Zs)
-            pose_target_convention=cls.pose_target_convention,
         )
 
     def to_instance_pose(self) -> InstancePose:
         """Convert PoseTarget to InstancePose."""
+        # To uv space (i.e., divide by z) with log depth
+        scene_shift = self.scene_center
+        scene_shift_z = scene_shift[..., -1:]
+        scene_shift_z_safe = get_zero_safe_values(scene_shift_z, eps=self.eps)
+        scene_shift_uv = scene_shift / scene_shift_z_safe  # [Xs/Zs, Ys/Zs, 1]
+
         # Recover instance translation
         ins_translation = self.translation.clone()  # [X/Z - Xs/Zs, Y/Z - Ys/Zs, 0]
-        ins_translation += self.scene_center  # [X/Z, Y/Z, 1]
+        ins_translation += scene_shift_uv  # [X/Z, Y/Z, 1]
         ins_translation[..., -1] = 1.0  # enforce one z-component
-        ins_translation_z = torch.exp(self.translation_scale + self.scene_translation_scale)  # Z
+        ins_translation_z = torch.exp(self.translation_scale + torch.log(scene_shift_z_safe))  # Z
         ins_translation *= ins_translation_z  # [X, Y, Z]
-        # Recover actual scene shift
-        scene_shift_z = torch.exp(self.scene_translation_scale)  # Zs
-        scene_shift = self.scene_center * scene_shift_z  # [Xs, Ys, Zs]
 
         return InstancePose(
-            scale=self.scale * self.scene_scale,
+            scale=self.scale * get_zero_safe_values(self.scene_scale, eps=self.eps),
             translation=ins_translation,
             rotation=self.rotation,
             scene_scale=self.scene_scale,
-            scene_shift=scene_shift,
+            scene_shift=self.scene_center,
         )
 
     def to_invariant(self) -> InvariantPoseTarget:
@@ -770,7 +774,6 @@ class NormalizedSceneScale(PoseTarget):
             translation=translation,
             scene_scale=invariant_targets.s_scene,
             scene_center=invariant_targets.t_scene_center,
-            pose_target_convention=cls.pose_target_convention,
         )
 
     def to_invariant(self) -> InvariantPoseTarget:
@@ -804,7 +807,6 @@ class Naive(PoseTarget):
             translation=translation,
             scene_scale=invariant_targets.s_scene,
             scene_center=invariant_targets.t_scene_center,
-            pose_target_convention=cls.pose_target_convention,
         )
 
     def to_invariant(self) -> InvariantPoseTarget:
@@ -838,7 +840,6 @@ class NormalizedSceneScaleAndTranslation(PoseTarget):
             scene_scale=invariant_targets.s_scene,
             scene_center=invariant_targets.t_scene_center,
             translation_scale=invariant_targets.t_rel_norm,
-            pose_target_convention=cls.pose_target_convention,
         )
 
     def to_invariant(self) -> InvariantPoseTarget:
@@ -871,7 +872,6 @@ class ApparentSize(PoseTarget):
             scene_scale=invariant_targets.s_scene,
             scene_center=invariant_targets.t_scene_center,
             translation_scale=invariant_targets.t_rel_norm,
-            pose_target_convention=cls.pose_target_convention,
         )
 
     def to_invariant(self) -> InvariantPoseTarget:
@@ -904,7 +904,6 @@ class Identity(PoseTarget):
             translation=instance_pose.translation,
             scene_scale=instance_pose.scene_scale,
             scene_center=instance_pose.scene_shift,
-            pose_target_convention=cls.pose_target_convention,
         )
 
     def to_instance_pose(self) -> InstancePose:
