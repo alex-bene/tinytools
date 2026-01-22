@@ -1,4 +1,4 @@
-"""Pre-Normalization Block Module with Residual Connection."""
+"""Feedforward Block Module with Residual Connection."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 
 class FFBlock(nn.Module):
-    """Pre-Normalization Block with optional Residual Connection.
+    """Feedforward Block with optional Residual Connection.
 
     Applies normalization before passing the input through the given function/module.
     Optionally adds a residual connection.
@@ -31,7 +31,7 @@ class FFBlock(nn.Module):
             Defaults to "gated".
         activation_fn (Callable[[torch.Tensor], torch.Tensor], optional): Activation function for the MLP.
             Defaults to SiLU.
-        norm_first (bool, optional): Whether to apply normalization before the MLP or in the end. Defaults to False.
+        norm_first (bool, optional): Whether to apply normalization before the MLP or in the end. Defaults to True.
         norm_fn (Callable[[int], nn.Module], optional): A callable that returns a normalization layer given the input
             dimension. Defaults to nn.LayerNorm.
         residual (bool, optional): Whether to include a residual connection. Defaults to True.
@@ -47,30 +47,28 @@ class FFBlock(nn.Module):
         dropout: float = 0.0,
         mlp_type: Literal["gated", "vanilla"] = "gated",
         activation_fn: Callable[[torch.Tensor], torch.Tensor] = F.silu,
-        norm_first: bool = False,
+        norm_first: bool = True,
         norm_fn: Callable[[int], nn.Module] = nn.LayerNorm,
         residual: bool = True,
     ) -> None:
         super().__init__()
         self.residual = residual
         self.norm_first = norm_first
-        self.norm = norm_fn(input_dim)
+        output_dim = output_dim if output_dim is not None else input_dim
+        self.norm = norm_fn(input_dim if norm_first else output_dim)
         mlp_kwargs = {
             "input_dim": input_dim,
             "hidden_dim": hidden_dim,
-            "output_dim": output_dim if output_dim is not None else input_dim,
+            "output_dim": output_dim,
             "bias": bias,
             "dropout": dropout,
             "activation_fn": activation_fn,
+            "dropout_at_end": bool(residual),
         }
-        self.mlp = (
-            GatedMLP(**mlp_kwargs, skip_output_layer=False)
-            if mlp_type == "gated"
-            else VanillaMLP(**mlp_kwargs, dropout_at_end=bool(residual))
-        )
+        self.mlp = GatedMLP(**mlp_kwargs, skip_output_layer=False) if mlp_type == "gated" else VanillaMLP(**mlp_kwargs)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """Forward pass of the PreNormBlock."""
+        """Forward pass of the FFBlock."""
         out = self.norm(x) if self.norm_first else x
         out = self.mlp(out)
         out = x + out if self.residual else out
