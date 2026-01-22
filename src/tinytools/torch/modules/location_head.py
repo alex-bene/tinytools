@@ -8,7 +8,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-from tinytools.torch import FFBlock
+from .ff_block import FFBlock
 
 
 class LocationHead(nn.Module):
