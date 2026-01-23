@@ -35,6 +35,9 @@ class FFBlock(nn.Module):
         norm_fn (Callable[[int], nn.Module], optional): A callable that returns a normalization layer given the input
             dimension. Defaults to nn.LayerNorm.
         residual (bool, optional): Whether to include a residual connection. Defaults to True.
+        dropout_at_end (bool | None, optional): Whether to apply dropout after the final layer of the MLP.
+            If used in a residual block, then set to true. Otherwise, set to false to avoid running a normalization
+            layer after dropout. If None, defaults to the value of `residual`. Defaults to None.
 
     """
 
@@ -50,6 +53,7 @@ class FFBlock(nn.Module):
         norm_first: bool = True,
         norm_fn: Callable[[int], nn.Module] = nn.LayerNorm,
         residual: bool = True,
+        dropout_at_end: bool | None = None,
     ) -> None:
         super().__init__()
         self.residual = residual
@@ -63,7 +67,7 @@ class FFBlock(nn.Module):
             "bias": bias,
             "dropout": dropout,
             "activation_fn": activation_fn,
-            "dropout_at_end": bool(residual),
+            "dropout_at_end": bool(residual) if dropout_at_end is None else dropout_at_end,
         }
         self.mlp = GatedMLP(**mlp_kwargs, skip_output_layer=False) if mlp_type == "gated" else VanillaMLP(**mlp_kwargs)
 
