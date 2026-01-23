@@ -44,7 +44,7 @@ class FFBlock(nn.Module):
         hidden_dim: int,
         output_dim: int | None = None,
         bias: bool = True,
-        dropout: float = 0.0,
+        dropout: float = 0.1,
         mlp_type: Literal["gated", "vanilla"] = "gated",
         activation_fn: Callable[[torch.Tensor], torch.Tensor] = F.silu,
         norm_first: bool = True,

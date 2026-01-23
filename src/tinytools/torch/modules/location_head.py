@@ -23,11 +23,11 @@ class LocationHead(nn.Module):
         hidden_dim: int | None = None,
         bias: bool = True,
         dropout: float = 0.1,
-        mlp_type: Literal["gated", "vanilla"] = "gated",
-        activation_fn: Callable[[torch.Tensor], torch.Tensor] = F.silu,
-        norm_first: bool = False,
+        mlp_type: Literal["gated", "vanilla"] = "vanilla",
+        activation_fn: Callable[[torch.Tensor], torch.Tensor] = F.relu,
+        norm_first: bool = True,
         norm_fn: Callable[[int], nn.Module] = nn.LayerNorm,
-        residual: bool = True,
+        residual: bool = False,
     ) -> None:
         super().__init__()
         ff_block_kwargs = {
@@ -35,6 +35,7 @@ class LocationHead(nn.Module):
             "hidden_dim": hidden_dim if hidden_dim is not None else 4 * input_dim,
             "bias": bias,
             "dropout": dropout,
+            "dropout_at_end": False,
             "mlp_type": mlp_type,
             "activation_fn": activation_fn,
             "norm_first": norm_first,
