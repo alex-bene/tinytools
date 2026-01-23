@@ -39,16 +39,24 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
-def ssi_to_metric(scale: torch.Tensor, shift: torch.Tensor) -> Transform3d:
+def ssi_to_metric(scale: torch.Tensor | None, shift: torch.Tensor | None) -> Transform3d:
     """Get the Transform3d that converts Scale-Shift-Invariant coordinates to Metric coordinates."""
     requires("pytorch3d", "-> ssi_to_metric")
-    if scale.ndim == 1:
-        scale = scale.unsqueeze(0)
-    if scale.shape[-1] == 1:
-        scale = scale.expand(*scale.shape[:-1], 3)
-    if shift.ndim == 1:
-        shift = shift.unsqueeze(0)
-    return pt3d_Transform3d().scale(scale).translate(shift).to(shift.device)
+    if shift is None and scale is None:
+        msg = "At least one of scale or shift must be provided to define the SSI to Metric transform."
+        raise ValueError(msg)
+    transform = pt3d_Transform3d()
+    if scale is not None:
+        if scale.ndim == 1:
+            scale = scale.unsqueeze(0)
+        if scale.shape[-1] == 1:
+            scale = scale.expand(*scale.shape[:-1], 3)
+        transform = transform.scale(scale).to(scale.device)
+    if shift is not None:
+        if shift.ndim == 1:
+            shift = shift.unsqueeze(0)
+        transform = transform.translate(shift).to(shift.device)
+    return transform
 
 
 @dataclass
@@ -90,29 +98,15 @@ class InstancePose:  # noqa: PLW1641
     scene_scale: torch.Tensor | None = None
     scene_shift: torch.Tensor | None = None
 
-    def __post_init__(self) -> None:
-        """Complete missing fields with default values."""
-        if self.scale is None:
-            self.scale = torch.ones_like(self.translation[..., :1])
-        if self.scene_scale is None:
-            self.scene_scale = torch.ones_like(self.translation[..., :1])
-        if self.scene_shift is None:
-            self.scene_shift = torch.zeros_like(self.translation)
-
     def __eq__(self, other: object, rtol: float = 1e-5, atol: float = 1e-5) -> bool:
         """Check equality between two PoseTarget instances."""
         if not isinstance(other, InstancePose):
             return NotImplemented
-        return (
-            torch.allclose(self.scale, other.scale, rtol=rtol, atol=atol)
-            and (
-                torch.allclose(self.rotation, other.rotation, rtol=rtol, atol=atol)
-                if self.rotation is not None and other.rotation is not None
-                else other.rotation is None and self.rotation is None
-            )
-            and torch.allclose(self.translation, other.translation, rtol=rtol, atol=atol)
-            and torch.allclose(self.scene_scale, other.scene_scale, rtol=rtol, atol=atol)
-            and torch.allclose(self.scene_shift, other.scene_shift, rtol=rtol, atol=atol)
+        return all(
+            torch.allclose(getattr(self, field), getattr(other, field), rtol=rtol, atol=atol)
+            if getattr(self, field) is not None and getattr(other, field) is not None
+            else getattr(self, field) is None and getattr(other, field) is None
+            for field in ["scale", "rotation", "translation", "scene_scale", "scene_shift"]
         )
 
 
@@ -211,7 +205,7 @@ class InvariantPoseTarget:  # noqa: PLW1641
     @staticmethod
     def from_instance_pose(instance_pose: InstancePose) -> InvariantPoseTarget:
         """Create an InvariantPoseTarget from an InstancePose."""
-        q = instance_pose.rotation  # (..., 4)
+        q = instance_pose.rotation  # (..., rot_dims)
         s_obj_to_scene = instance_pose.scale  # (..., 1) or (..., 3)
         t_obj_to_scene = instance_pose.translation  # (..., 3)
         s_scene = instance_pose.scene_scale  # (..., 1)
@@ -253,14 +247,11 @@ class InvariantPoseTarget:  # noqa: PLW1641
         """Check equality between two PoseTarget instances."""
         if not isinstance(other, InvariantPoseTarget):
             return NotImplemented
-        return (
-            torch.allclose(self.q, other.q, rtol=rtol, atol=atol)
-            and torch.allclose(self.t_unit, other.t_unit, rtol=rtol, atol=atol)
-            and torch.allclose(self.s_scene, other.s_scene, rtol=rtol, atol=atol)
-            and torch.allclose(self.t_scene_center, other.t_scene_center, rtol=rtol, atol=atol)
-            and torch.allclose(self.t_rel_norm, other.t_rel_norm, rtol=rtol, atol=atol)
-            and torch.allclose(self.s_tilde, other.s_tilde, rtol=rtol, atol=atol)
-            and torch.allclose(self.s_rel, other.s_rel, rtol=rtol, atol=atol)
+        return all(
+            torch.allclose(getattr(self, field), getattr(other, field), rtol=rtol, atol=atol)
+            if getattr(self, field) is not None and getattr(other, field) is not None
+            else getattr(self, field) is None and getattr(other, field) is None
+            for field in ["q", "t_unit", "s_scene", "t_scene_center", "t_rel_norm", "s_tilde", "s_rel"]
         )
 
 
@@ -312,17 +303,6 @@ class PoseTarget:  # noqa: PLW1641
 
     """Convert between pose_target <-> instance_pose <-> invariant_pose_target."""
 
-    def __post_init__(self) -> None:
-        """Complete missing fields with default values."""
-        if self.scale is None:
-            self.scale = torch.ones_like(self.translation[..., :1])
-        if self.scene_scale is None:
-            self.scene_scale = torch.ones_like(self.translation[..., :1])
-        if self.scene_center is None:
-            self.scene_center = torch.zeros_like(self.translation)
-        if self.translation_scale is None:
-            self.translation_scale = torch.ones_like(self.translation[..., :1])
-
     @classmethod
     def from_invariant(cls, _: InvariantPoseTarget) -> PoseTarget:
         """Convert InvariantPoseTarget to PoseTarget."""
@@ -349,19 +329,38 @@ class PoseTarget:  # noqa: PLW1641
         """Check equality between two PoseTarget instances."""
         if not isinstance(other, PoseTarget):
             return NotImplemented
-        return (
-            torch.allclose(self.scale, other.scale, rtol=rtol, atol=atol)
-            and (
-                torch.allclose(self.rotation, other.rotation, rtol=rtol, atol=atol)
-                if self.rotation is not None and other.rotation is not None
-                else other.rotation is None and self.rotation is None
-            )
-            and torch.allclose(self.translation, other.translation, rtol=rtol, atol=atol)
-            and torch.allclose(self.scene_scale, other.scene_scale, rtol=rtol, atol=atol)
-            and torch.allclose(self.scene_center, other.scene_center, rtol=rtol, atol=atol)
-            and torch.allclose(self.translation_scale, other.translation_scale, rtol=rtol, atol=atol)
-            and self.pose_target_convention == other.pose_target_convention
+        return self.pose_target_convention == other.pose_target_convention and all(
+            torch.allclose(getattr(self, field), getattr(other, field), rtol=rtol, atol=atol)
+            if getattr(self, field) is not None and getattr(other, field) is not None
+            else getattr(self, field) is None and getattr(other, field) is None
+            for field in ["scale", "rotation", "translation", "scene_scale", "scene_center", "translation_scale"]
         )
+
+    def prediction_params(self) -> dict[str, torch.Tensor]:
+        """Get the parameters to be predicted by a neural network.
+
+        Returns:
+            A dictionary containing the parameters to be predicted by a neural network.
+
+        """
+        params = {}
+        if self.scale is not None:
+            params["scale"] = self.scale
+        if self.rotation is not None:
+            params["rotation"] = self.rotation
+        params["translation"] = self.translation
+        if self.pose_target_convention in [
+            "DisparitySpace",
+            "LogarithmicDisparitySpace",
+            "ApparentSize",
+            "NormalizedSceneScaleAndTranslation",
+            "ScaleShiftInvariantWTranslationScale",
+        ]:
+            # These conventions predict normalized translation, so we include scene params
+            params["translation"] = self.translation[..., :2]  # only u,v
+            params["translation_scale"] = self.translation_scale
+
+        return params
 
 
 class ScaleShiftInvariant(PoseTarget):
@@ -378,8 +377,11 @@ class ScaleShiftInvariant(PoseTarget):
     translation_std = torch.tensor([1.341888666152954, 0.7665449380874634, 3.175130605697632]).to(torch.float32)
 
     def __post_init__(self) -> None:
-        """Ensure pytorch3d is available."""
+        """Ensure pytorch3d is available and scene params are set."""
         requires("pytorch3d", "-> ScaleShiftInvariant")
+        if self.scene_scale is None and self.scene_center is None:
+            msg = f"scene_scale or scene_center must be provided for {self.pose_target_convention} PoseTarget."
+            raise ValueError(msg)
         super().__post_init__()
 
     @classmethod
@@ -391,6 +393,9 @@ class ScaleShiftInvariant(PoseTarget):
         """
         scene_scale = instance_pose.scene_scale
         scene_shift = instance_pose.scene_shift
+        if scene_scale is None and scene_shift is None:
+            msg = "scene_scale or scene_center must be provided for ScaleShiftInvariant PoseTarget."
+            raise ValueError(msg)
 
         ssi_scale, ssi_rotation, ssi_translation = broadcast_postcompose(
             scale=instance_pose.scale,
@@ -399,16 +404,18 @@ class ScaleShiftInvariant(PoseTarget):
             transform_to_postcompose=ssi_to_metric(scene_scale, scene_shift).inverse(),
         )
         if normalize:
-            device = ssi_scale.device
-            ssi_scale = (ssi_scale - cls.scale_mean.to(device)) / cls.scale_std.to(device)
+            device = ssi_translation.device
+            ssi_scale = (
+                ((ssi_scale - cls.scale_mean.to(device)) / cls.scale_std.to(device)) if ssi_scale is not None else None
+            )
             ssi_translation = (ssi_translation - cls.translation_mean.to(device)) / cls.translation_std.to(device)
 
         return ScaleShiftInvariant(
             scale=ssi_scale,
             rotation=ssi_rotation,
             translation=ssi_translation,
-            scene_scale=scene_scale,
-            scene_center=scene_shift,
+            scene_scale=instance_pose.scene_scale,
+            scene_center=instance_pose.scene_shift,
         )
 
     def to_instance_pose(self, normalize: bool = False) -> InstancePose:
@@ -419,8 +426,12 @@ class ScaleShiftInvariant(PoseTarget):
         """
         if normalize:
             # Denormalize
-            device = self.scale.device
-            self.scale = self.scale * self.scale_std.to(device) + self.scale_mean.to(device)
+            device = self.translation.device
+            self.scale = (
+                (self.scale * self.scale_std.to(device) + self.scale_mean.to(device))
+                if self.scale is not None
+                else None
+            )
             self.translation = self.translation * self.translation_std.to(device) + self.translation_mean.to(device)
 
         ins_scale, ins_rotation, ins_translation = broadcast_postcompose(
@@ -490,8 +501,12 @@ class ScaleShiftInvariantWTranslationScale(ScaleShiftInvariant):
 
         if normalize:
             # Denormalize
-            device = self.scale.device
-            self.scale = self.scale * self.scale_std.to(device) + self.scale_mean.to(device)
+            device = self.translation.device
+            self.scale = (
+                (self.scale * self.scale_std.to(device) + self.scale_mean.to(device))
+                if self.scale is not None
+                else None
+            )
             ins_translation = ins_translation * self.translation_std.to(device) + self.translation_mean.to(device)
 
         ins_scale, ins_rotation, ins_translation = broadcast_postcompose(
@@ -521,14 +536,6 @@ class DisparitySpace(PoseTarget):
     pose_target_convention: str = "DisparitySpace"
     eps: float = 1e-6  # for safe division
 
-    def __post_init__(self) -> None:
-        """Ensure scene_center is set."""
-        if self.scene_center is None:
-            self.scene_center = torch.zeros_like(self.translation)
-            # default scene center at [0,0,1] and pose_translation_scale = Z - 1
-            self.scene_center[..., -1] = 1.0  # default scene center at [0,0,1]
-        return super().__post_init__()
-
     @classmethod
     def from_instance_pose(cls, instance_pose: InstancePose) -> DisparitySpace:
         """Convert InstancePose to PoseTarget."""
@@ -538,6 +545,9 @@ class DisparitySpace(PoseTarget):
 
         # To uv space (i.e., divide by z)
         scene_shift = instance_pose.scene_shift
+        if scene_shift is None:
+            scene_shift = torch.zeros_like(instance_pose.translation)
+            scene_shift[..., -1] = 1.0  # default scene center at [0,0,1]
         scene_shift_z = scene_shift[..., -1:]
         scene_shift_uv = scene_shift / get_zero_safe_values(scene_shift_z, eps=cls.eps)  # [Xs/Zs, Ys/Zs, 1]
 
@@ -550,8 +560,11 @@ class DisparitySpace(PoseTarget):
         pose_translation[..., -1] = 0.0  # enforce zero z-component
         pose_translation_scale = scene_shift_z / pose_z_safe  # Zs / Z
 
+        scale = instance_pose.scale
+        if scale is not None and instance_pose.scene_scale is not None:
+            scale = scale / get_zero_safe_values(instance_pose.scene_scale, eps=cls.eps)
         return DisparitySpace(
-            scale=instance_pose.scale / get_zero_safe_values(instance_pose.scene_scale, eps=cls.eps),
+            scale=scale,  # orig_scale / Ss
             translation=pose_translation,  # [X/Z - Xs/Zs, Y/Z - Ys/Zs, 0]
             translation_scale=pose_translation_scale,  # Zs / Z
             rotation=instance_pose.rotation,
@@ -563,6 +576,10 @@ class DisparitySpace(PoseTarget):
         """Convert PoseTarget to InstancePose."""
         # Calcualte displarity space scene center
         scene_shift = self.scene_center  # [Xs, Ys, Zs]
+        if scene_shift is None:
+            scene_shift = torch.zeros_like(self.translation)
+            scene_shift[..., -1] = 1.0  # default scene center at [0,0,1]
+
         scene_shift_z = scene_shift[..., -1:]
         scene_shift_uv = scene_shift / get_zero_safe_values(scene_shift_z, eps=self.eps)  # [Xs/Zs, Ys/Zs, 1]
         # Recover instance translation
@@ -572,8 +589,11 @@ class DisparitySpace(PoseTarget):
         ins_translation_z = scene_shift_z / get_zero_safe_values(self.translation_scale, eps=self.eps)  # Z
         ins_translation *= ins_translation_z  # [X, Y, Z]
 
+        scale = self.scale
+        if scale is not None and self.scene_scale is not None:
+            scale = scale * get_zero_safe_values(self.scene_scale, eps=self.eps)
         return InstancePose(
-            scale=self.scale * get_zero_safe_values(self.scene_scale, eps=self.eps),
+            scale=scale,
             translation=ins_translation,
             rotation=self.rotation,
             scene_scale=self.scene_scale,
@@ -605,15 +625,6 @@ class LogarithmicDisparitySpace(PoseTarget):
     pose_target_convention: str = "LogarithmicDisparitySpace"
     eps: float = 1e-6  # for safe log and division
 
-    def __post_init__(self) -> None:
-        """Ensure scene_center is set."""
-        if self.scene_center is None:
-            self.scene_center = torch.zeros_like(self.translation)
-            # default scene center at [0,0,1]
-            # log(1) = 0 so pose_translation_scale=log(Z)
-            self.scene_center[..., -1] = 1.0
-        return super().__post_init__()
-
     @classmethod
     def from_instance_pose(cls, instance_pose: InstancePose) -> LogarithmicDisparitySpace:
         """Convert InstancePose to PoseTarget."""
@@ -623,6 +634,9 @@ class LogarithmicDisparitySpace(PoseTarget):
 
         # To uv space (i.e., divide by z) with log depth
         scene_shift = instance_pose.scene_shift
+        if scene_shift is None:
+            scene_shift = torch.zeros_like(instance_pose.translation)
+            scene_shift[..., -1] = 1.0  # default scene center at [0,0,1]
         scene_shift_z = scene_shift[..., -1:]
         scene_shift_z_safe = get_zero_safe_values(scene_shift_z, eps=cls.eps)
         scene_shift_uv = scene_shift / scene_shift_z_safe  # [Xs/Zs, Ys/Zs, 1]
@@ -636,8 +650,11 @@ class LogarithmicDisparitySpace(PoseTarget):
         pose_translation[..., -1] = 0.0  # enforce zero z-component
         pose_translation_scale = torch.log(pose_z_safe) - torch.log(scene_shift_z_safe)  # log(Z / Zs)
 
+        scale = instance_pose.scale
+        if scale is not None and instance_pose.scene_scale is not None:
+            scale = scale / get_zero_safe_values(instance_pose.scene_scale, eps=cls.eps)
         return LogarithmicDisparitySpace(
-            scale=instance_pose.scale / get_zero_safe_values(instance_pose.scene_scale, eps=cls.eps),  # orig_scale / Ss
+            scale=scale,  # orig_scale / Ss
             translation=pose_translation,  # [X/Z - Xs/Zs, Y/Z - Ys/Zs, 0]
             translation_scale=pose_translation_scale,  # log(Z / Zs)
             rotation=instance_pose.rotation,
@@ -649,6 +666,9 @@ class LogarithmicDisparitySpace(PoseTarget):
         """Convert PoseTarget to InstancePose."""
         # To uv space (i.e., divide by z) with log depth
         scene_shift = self.scene_center
+        if scene_shift is None:
+            scene_shift = torch.zeros_like(self.translation)
+            scene_shift[..., -1] = 1.0  # default scene center at [0,0,1]
         scene_shift_z = scene_shift[..., -1:]
         scene_shift_z_safe = get_zero_safe_values(scene_shift_z, eps=self.eps)
         scene_shift_uv = scene_shift / scene_shift_z_safe  # [Xs/Zs, Ys/Zs, 1]
@@ -660,8 +680,11 @@ class LogarithmicDisparitySpace(PoseTarget):
         ins_translation_z = torch.exp(self.translation_scale + torch.log(scene_shift_z_safe))  # Z
         ins_translation *= ins_translation_z  # [X, Y, Z]
 
+        scale = self.scale
+        if scale is not None and self.scene_scale is not None:
+            scale = scale * get_zero_safe_values(self.scene_scale, eps=self.eps)
         return InstancePose(
-            scale=self.scale * get_zero_safe_values(self.scene_scale, eps=self.eps),
+            scale=scale,
             translation=ins_translation,
             rotation=self.rotation,
             scene_scale=self.scene_scale,
