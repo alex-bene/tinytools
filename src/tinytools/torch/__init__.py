@@ -5,6 +5,14 @@ if importlib_util.find_spec("torch") is None:
     raise ImportError(msg)
 
 from .modules import ConstantLayer, FFBlock, GatedMLP, LocationHead, VanillaMLP
-from .utils import freeze_module
+from .utils import freeze_module, get_zero_safe_values
 
-__all__ = ["ConstantLayer", "FFBlock", "GatedMLP", "LocationHead", "VanillaMLP", "freeze_module"]
+__all__ = [
+    "ConstantLayer",
+    "FFBlock",
+    "GatedMLP",
+    "LocationHead",
+    "VanillaMLP",
+    "freeze_module",
+    "get_zero_safe_values",
+]

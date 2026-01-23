@@ -24,8 +24,9 @@ import torch
 
 from tinytools.imports import requires
 from tinytools.logger import get_logger
+from tinytools.torch import get_zero_safe_values
 
-from .transforms import compose_transform, decompose_transform
+from .transforms import broadcast_postcompose
 
 try:
     from pytorch3d.transforms import Transform3d as pt3d_Transform3d  # pyright: ignore[reportMissingImports]
@@ -36,36 +37,6 @@ if TYPE_CHECKING:
     from pytorch3d.transforms import Transform3d  # pyright: ignore[reportMissingImports]
 
 logger = get_logger(__name__)
-
-
-def get_zero_safe_values(tensor: torch.Tensor, eps: float) -> torch.Tensor:
-    """Replace values in tensor that are close to zero with +/- eps."""
-    return torch.where(tensor.abs() < eps, eps * torch.sign(tensor).add(tensor == 0), tensor)
-
-
-def get_scale_and_shift(pointmap: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    """Compute scale and shift for a pointmap.
-
-    Args:
-        pointmap: A tensor of shape (..., 3) representing 3D points.
-
-    Returns:
-        A tuple containing:
-            - scale: A tensor of shape (3,) representing the scale along each axis.
-            - shift: A tensor of shape (3,) representing the shift along each axis.
-
-    """
-    shift_z = pointmap[..., -1].nanmedian().unsqueeze(0)
-    shift = torch.zeros_like(shift_z.expand(1, 3))
-    shift[..., -1] = shift_z
-
-    shifted_pointmap = pointmap - shift
-    scale = shifted_pointmap.abs().nanmean().to(shift.device)
-
-    shift = shift.reshape(3)
-    scale = scale.expand(3)
-
-    return scale, shift
 
 
 def ssi_to_metric(scale: torch.Tensor, shift: torch.Tensor) -> Transform3d:
@@ -123,8 +94,6 @@ class InstancePose:  # noqa: PLW1641
         """Complete missing fields with default values."""
         if self.scale is None:
             self.scale = torch.ones_like(self.translation[..., :1])
-        if self.rotation is None:
-            self.rotation = torch.eye(3, device=self.translation.device).expand(*self.translation.shape[:-1], 3, 3)
         if self.scene_scale is None:
             self.scene_scale = torch.ones_like(self.translation[..., :1])
         if self.scene_shift is None:
@@ -137,60 +106,12 @@ class InstancePose:  # noqa: PLW1641
         return (
             torch.allclose(self.scale, other.scale, rtol=rtol, atol=atol)
             and torch.allclose(self.rotation, other.rotation, rtol=rtol, atol=atol)
+            if self.rotation is not None
+            else other.rotation is None
             and torch.allclose(self.translation, other.translation, rtol=rtol, atol=atol)
             and torch.allclose(self.scene_scale, other.scene_scale, rtol=rtol, atol=atol)
             and torch.allclose(self.scene_shift, other.scene_shift, rtol=rtol, atol=atol)
         )
-
-    @classmethod
-    def _broadcast_postcompose(
-        cls,
-        scale: torch.Tensor,
-        rotation: torch.Tensor,
-        translation: torch.Tensor,
-        transform_to_postcompose: Transform3d,
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Broadcasted post-composition of a transform defined by scale, rotation, translation with another transform.
-
-        Args:
-            scale(torch.Tensor): (B, ..., 1 or 3) tensor of scale factors
-            rotation(torch.Tensor): (B, ..., 3, 3) tensor of rotation matrices
-            translation(torch.Tensor): (B, ..., 3) tensor of translation vectors
-            transform_to_postcompose(Transform3d): transform to post-compose with. Should have shape (B, 4, 4)
-
-        Returns:
-            tuple[torch.Tensor, torch.Tensor, torch.Tensor]: Decomposed scale, rotation, translation after
-                post-composition.
-
-        """
-        single_scale = scale.shape[-1] == 1
-        if single_scale:
-            scale = scale.expand(*scale.shape[:-1], 3)
-
-        b = scale.shape[0]
-        lead_dims = scale.shape[:-1]
-        flattened_lead_dims_size = int(torch.prod(torch.tensor(lead_dims)).item())
-        # Create transform of shape (flattened_lead_dims_size)
-        composed = compose_transform(
-            scale=scale.reshape(flattened_lead_dims_size, 3),
-            rotation=rotation.reshape(flattened_lead_dims_size, 3, 3),
-            translation=translation.reshape(flattened_lead_dims_size, 3),
-        )
-
-        # Apply transform to shape (flattened_lead_dims_size)
-        pc_transform: torch.Tensor = transform_to_postcompose.get_matrix()  # size B, 4, 4
-        pc_transform = pc_transform.repeat(flattened_lead_dims_size // b, 1, 1)  # size (B * K, 4, 4)
-        stacked_pc_transform = pt3d_Transform3d(matrix=pc_transform)
-        postcomposed = composed.compose(stacked_pc_transform)
-
-        # Decompose back to shape (B, ..., C)
-        scale, rotation, translation = decompose_transform(postcomposed)
-        scale = scale.reshape(*lead_dims, 3)
-        rotation = rotation.reshape(*lead_dims, 3, 3)
-        translation = translation.reshape(*lead_dims, 3)
-        if single_scale:
-            scale = scale[..., 0].unsqueeze(-1)
-        return scale, rotation, translation
 
 
 @dataclass
@@ -393,8 +314,6 @@ class PoseTarget:  # noqa: PLW1641
         """Complete missing fields with default values."""
         if self.scale is None:
             self.scale = torch.ones_like(self.translation[..., :1])
-        if self.rotation is None:
-            self.rotation = torch.eye(3, device=self.translation.device).expand(*self.translation.shape[:-1], 3, 3)
         if self.scene_scale is None:
             self.scene_scale = torch.ones_like(self.translation[..., :1])
         if self.scene_center is None:
@@ -431,6 +350,8 @@ class PoseTarget:  # noqa: PLW1641
         return (
             torch.allclose(self.scale, other.scale, rtol=rtol, atol=atol)
             and torch.allclose(self.rotation, other.rotation, rtol=rtol, atol=atol)
+            if self.rotation is not None
+            else other.rotation is None
             and torch.allclose(self.translation, other.translation, rtol=rtol, atol=atol)
             and torch.allclose(self.scene_scale, other.scene_scale, rtol=rtol, atol=atol)
             and torch.allclose(self.scene_center, other.scene_center, rtol=rtol, atol=atol)
@@ -467,7 +388,7 @@ class ScaleShiftInvariant(PoseTarget):
         scene_scale = instance_pose.scene_scale
         scene_shift = instance_pose.scene_shift
 
-        ssi_scale, ssi_rotation, ssi_translation = InstancePose._broadcast_postcompose(
+        ssi_scale, ssi_rotation, ssi_translation = broadcast_postcompose(
             scale=instance_pose.scale,
             rotation=instance_pose.rotation,
             translation=instance_pose.translation,
@@ -498,7 +419,7 @@ class ScaleShiftInvariant(PoseTarget):
             self.scale = self.scale * self.scale_std.to(device) + self.scale_mean.to(device)
             self.translation = self.translation * self.translation_std.to(device) + self.translation_mean.to(device)
 
-        ins_scale, ins_rotation, ins_translation = InstancePose._broadcast_postcompose(
+        ins_scale, ins_rotation, ins_translation = broadcast_postcompose(
             scale=self.scale,
             rotation=self.rotation,
             translation=self.translation,
@@ -569,7 +490,7 @@ class ScaleShiftInvariantWTranslationScale(ScaleShiftInvariant):
             self.scale = self.scale * self.scale_std.to(device) + self.scale_mean.to(device)
             ins_translation = ins_translation * self.translation_std.to(device) + self.translation_mean.to(device)
 
-        ins_scale, ins_rotation, ins_translation = InstancePose._broadcast_postcompose(
+        ins_scale, ins_rotation, ins_translation = broadcast_postcompose(
             scale=self.scale,
             rotation=self.rotation,
             translation=ins_translation,

@@ -8,12 +8,23 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, NamedTuple
 
+import torch
+
 from tinytools.imports import requires
 
 try:
     from pytorch3d.transforms import Transform3d as pt3d_Transform3d  # pyright: ignore[reportMissingImports]
+    from pytorch3d.transforms import (  # pyright: ignore[reportMissingImports]
+        axis_angle_to_matrix,
+        matrix_to_axis_angle,
+        matrix_to_quaternion,
+        matrix_to_rotation_6d,
+        quaternion_to_matrix,
+        rotation_6d_to_matrix,
+    )
 except ImportError:
     pt3d_Transform3d = None  # type: ignore[assignment]  # noqa: N816
+
 try:
     import torch  # pyright: ignore[reportMissingImports]
 except ImportError:
@@ -66,3 +77,70 @@ def decompose_transform(transform: Transform3d) -> DecomposedTransform:
     rotation = matrices[:, :3, :3] / scale.unsqueeze(-1)  # Normalize rotation matrix
     translation = matrices[:, 3, :3]  # Extract translation vector
     return DecomposedTransform(scale, rotation, translation)
+
+
+def broadcast_postcompose(
+    scale: Tensor, rotation: Tensor, translation: Tensor, transform_to_postcompose: Transform3d
+) -> tuple[Tensor, Tensor, Tensor]:
+    """Broadcasted post-composition of a transform defined by scale, rotation, translation with another transform.
+
+    Args:
+        scale(torch.Tensor): (B, ..., 1 or 3) tensor of scale factors
+        rotation(torch.Tensor): (B, ..., 4 or 3 or 6 or *(3, 3)) tensor of rotations
+        translation(torch.Tensor): (B, ..., 3) tensor of translation vectors
+        transform_to_postcompose(Transform3d): transform to post-compose with. Should have shape (B, 4, 4)
+
+    Returns:
+        tuple[torch.Tensor, torch.Tensor, torch.Tensor]: Decomposed scale, rotation, translation after
+            post-composition.
+
+    """
+    rotation_repr = None
+    if rotation is None:
+        rotation = torch.eye(3, device=translation.device).expand(*translation.shape[:-1], 3, 3)
+    if rotation.shape[-1] == 4:  # quaternion
+        rotation = quaternion_to_matrix(rotation)
+        rotation_repr = "quaternion"
+    if rotation.shape[-1] == 6:  # 6D
+        rotation = rotation_6d_to_matrix(rotation)
+        rotation_repr = "rotation_6d"
+    if rotation.shape[-1] == 3 and rotation.ndim == translation.ndim:  # axis-angle
+        rotation = axis_angle_to_matrix(rotation)
+        rotation_repr = "axis_angle"
+
+    single_scale = scale.shape[-1] == 1
+    if single_scale:
+        scale = scale.expand(*scale.shape[:-1], 3)
+
+    b = scale.shape[0]
+    lead_dims = scale.shape[:-1]
+    flattened_lead_dims_size = int(torch.prod(torch.tensor(lead_dims)).item())
+    # Create transform of shape (flattened_lead_dims_size)
+    composed = compose_transform(
+        scale=scale.reshape(flattened_lead_dims_size, 3),
+        rotation=rotation.reshape(flattened_lead_dims_size, 3, 3),
+        translation=translation.reshape(flattened_lead_dims_size, 3),
+    )
+
+    # Apply transform to shape (flattened_lead_dims_size)
+    pc_transform: Tensor = transform_to_postcompose.get_matrix()  # size B, 4, 4
+    pc_transform = pc_transform.repeat(flattened_lead_dims_size // b, 1, 1)  # size (B * K, 4, 4)
+    stacked_pc_transform = pt3d_Transform3d(matrix=pc_transform)
+    postcomposed = composed.compose(stacked_pc_transform)
+
+    # Decompose back to shape (B, ..., C)
+    scale, rotation, translation = decompose_transform(postcomposed)
+    scale = scale.reshape(*lead_dims, 3)
+    rotation = rotation.reshape(*lead_dims, 3, 3)
+    translation = translation.reshape(*lead_dims, 3)
+    if single_scale:
+        scale = scale[..., 0].unsqueeze(-1)
+    if rotation_repr == "quaternion":
+        rotation = matrix_to_quaternion(rotation)
+    if rotation_repr == "axis_angle":
+        rotation = matrix_to_axis_angle(rotation)
+    if rotation_repr == "rotation_6d":
+        rotation = matrix_to_rotation_6d(rotation)
+    if rotation_repr is None:
+        rotation = None
+    return scale, rotation, translation

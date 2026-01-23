@@ -29,8 +29,10 @@ if TYPE_CHECKING:
         PoseTargetFactory,
         ScaleShiftInvariant,
         ScaleShiftInvariantWTranslationScale,
+        broadcast_postcompose,
         compose_transform,
         decompose_transform,
+        get_scale_and_shift,
         pt3d_to_trimesh,
         transform_meshes,
     )
@@ -64,12 +66,14 @@ __all__ = [
     "VLLMModel",
     "VanillaMLP",
     "bbox_center",
+    "broadcast_postcompose",
     "compose_transform",
     "decompose_transform",
     "focal_to_fov",
     "fov_to_focal",
     "freeze_module",
     "get_logger",
+    "get_scale_and_shift",
     "get_video_fps",
     "image_grid",
     "img_from_array",
@@ -123,6 +127,8 @@ _LAZY_MAPPING = {
     "PoseTargetFactory": ".threeD.pose_target",
     "ScaleShiftInvariant": ".threeD.pose_target",
     "ScaleShiftInvariantWTranslationScale": ".threeD.pose_target",
+    "broadcast_postcompose": ".threeD.transforms",
+    "get_scale_and_shift": ".threeD.utils",
 }
 
 
