@@ -105,9 +105,11 @@ class InstancePose:  # noqa: PLW1641
             return NotImplemented
         return (
             torch.allclose(self.scale, other.scale, rtol=rtol, atol=atol)
-            and torch.allclose(self.rotation, other.rotation, rtol=rtol, atol=atol)
-            if self.rotation is not None
-            else other.rotation is None
+            and (
+                torch.allclose(self.rotation, other.rotation, rtol=rtol, atol=atol)
+                if self.rotation is not None and other.rotation is not None
+                else other.rotation is None and self.rotation is None
+            )
             and torch.allclose(self.translation, other.translation, rtol=rtol, atol=atol)
             and torch.allclose(self.scene_scale, other.scene_scale, rtol=rtol, atol=atol)
             and torch.allclose(self.scene_shift, other.scene_shift, rtol=rtol, atol=atol)
@@ -349,9 +351,11 @@ class PoseTarget:  # noqa: PLW1641
             return NotImplemented
         return (
             torch.allclose(self.scale, other.scale, rtol=rtol, atol=atol)
-            and torch.allclose(self.rotation, other.rotation, rtol=rtol, atol=atol)
-            if self.rotation is not None
-            else other.rotation is None
+            and (
+                torch.allclose(self.rotation, other.rotation, rtol=rtol, atol=atol)
+                if self.rotation is not None and other.rotation is not None
+                else other.rotation is None and self.rotation is None
+            )
             and torch.allclose(self.translation, other.translation, rtol=rtol, atol=atol)
             and torch.allclose(self.scene_scale, other.scene_scale, rtol=rtol, atol=atol)
             and torch.allclose(self.scene_center, other.scene_center, rtol=rtol, atol=atol)

@@ -40,7 +40,7 @@ def test_pose_target_defaults() -> None:
     translation = torch.rand(5, 4, 2, 3) * 15
     pose_target = PoseTarget(translation=translation)
     pose_target_explicit = PoseTarget(
-        rotation=torch.eye(3).expand(5, 4, 2, 3, 3),
+        rotation=None,
         translation=translation,
         scale=torch.ones(5, 4, 2, 1),
         scene_center=torch.zeros(5, 4, 2, 3),
@@ -56,7 +56,7 @@ def test_instance_pose_defaults() -> None:
     translation = torch.rand(5, 4, 2, 3) * 15
     instance_pose = InstancePose(translation=translation)
     instance_pose_explicit = InstancePose(
-        rotation=torch.eye(3).expand(5, 4, 2, 3, 3),
+        rotation=None,
         translation=translation,
         scale=torch.ones(5, 4, 2, 1),
         scene_shift=torch.zeros(5, 4, 2, 3),

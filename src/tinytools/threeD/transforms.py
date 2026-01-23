@@ -95,8 +95,9 @@ def broadcast_postcompose(
             post-composition.
 
     """
-    rotation_repr = None
+    rotation_repr = "mat"
     if rotation is None:
+        rotation_repr = None
         rotation = torch.eye(3, device=translation.device).expand(*translation.shape[:-1], 3, 3)
     if rotation.shape[-1] == 4:  # quaternion
         rotation = quaternion_to_matrix(rotation)
