@@ -7,8 +7,13 @@ from typing import TYPE_CHECKING, Callable
 import torch.nn.functional as F  # pyright: ignore[reportMissingImports]
 from torch import nn  # pyright: ignore[reportMissingImports]
 
+from tinytools.logger import get_logger
+
 if TYPE_CHECKING:
     import torch  # pyright: ignore[reportMissingImports]
+
+
+logger = get_logger(__name__)
 
 
 class VanillaMLP(nn.Module):
@@ -18,14 +23,16 @@ class VanillaMLP(nn.Module):
 
     Args:
         input_dim (int): Input feature dimension.
-        hidden_dim (int): Hidden layer dimension (typically larger than input_dim).
+        hidden_dim (int): Hidden layer dimension (typically larger than input_dim). If set to 0, a single linear layer
+            with output_dim is used.
         output_dim (int): Output feature dimension.
         bias (bool): Whether to use bias in linear layers. Defaults to True.
         dropout (float, optional): Dropout probability. Defaults to 0.1.
         dropout_at_end (bool, optional): Whether to apply dropout after the final layer. If use in a residual block,
             then set to true. Otherwise, set to false to avoid running a normalization layer after dropout.
             Defaults to True
-        dropout_at_mid (bool, optional): Whether to apply dropout after the hidden layer. Defaults to True.
+        dropout_at_mid (bool, optional): Whether to apply dropout after the hidden layer. If hidden_dim is 0, this is
+            ignored. Defaults to True.
         activation_fn (Callable[[torch.Tensor], torch.Tensor], optional): Activation function to use. Defaults to ReLU.
 
     """
@@ -42,12 +49,20 @@ class VanillaMLP(nn.Module):
         activation_fn: Callable[[torch.Tensor], torch.Tensor] = F.relu,
     ) -> None:
         super().__init__()
+        if hidden_dim == 0:
+            logger.info("Hidden dimension is set to 0. This means a single linear layer will be used.")
+            if dropout_at_mid:
+                logger.warning("dropout_at_mid is set to True but hidden_dim is 0. Ignoring dropout_at_mid.")
         self.dropout_at_end = dropout_at_end
-        self.dropout_at_mid = dropout_at_mid
+        self.dropout_at_mid = dropout_at_mid if hidden_dim != 0 else False
         self.activation = activation_fn
         self.dropout = nn.Dropout(p=dropout)
-        self.fc1 = nn.Linear(input_dim, hidden_dim, bias=bias)
-        self.fc2 = nn.Linear(hidden_dim, output_dim, bias=bias)
+        if hidden_dim == 0:
+            self.fc1 = nn.Linear(input_dim, output_dim, bias=bias)
+            self.fc2 = nn.Identity()
+        else:
+            self.fc1 = nn.Linear(input_dim, hidden_dim, bias=bias)
+            self.fc2 = nn.Linear(hidden_dim, output_dim, bias=bias) if hidden_dim != 0 else nn.Identity()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Vanilla MLP forward pass."""
