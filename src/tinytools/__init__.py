@@ -37,7 +37,6 @@ if TYPE_CHECKING:
         transform_meshes,
     )
     from .torch import ConstantLayer, FFBlock, GatedMLP, LocationHead, VanillaMLP, freeze_module
-    from .vlm.litellm import LiteLLMModel
     from .vlm.openai import OpenAIAPIModel
     from .vlm.vllm import VLLMModel
 
@@ -51,7 +50,6 @@ __all__ = [
     "FrozenNamespaceMeta",
     "GatedMLP",
     "Identity",
-    "LiteLLMModel",
     "LocationHead",
     "LogarithmicDisparitySpace",
     "Naive",
@@ -101,7 +99,6 @@ __all__ = [
 
 # An internal mapping from the public name to its source module.
 _LAZY_MAPPING = {
-    "LiteLLMModel": ".vlm.litellm",
     "VLLMModel": ".vlm.vllm",
     "OpenAIAPIModel": ".vlm.openai",
     "pt3d_to_trimesh": ".threeD.mesh_conversions",

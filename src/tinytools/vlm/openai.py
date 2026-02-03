@@ -25,7 +25,7 @@ try:
     import openai
     import torch
     from dotenv import load_dotenv
-    from litellm.litellm_core_utils.json_validation_rule import validate_schema
+    from jsonschema import validate
     from pydantic import ValidationError
 except ImportError as e:
     msg = 'LLM features are not available. Please install the required dependencies with: pip install "tinytools[llm]"'
@@ -319,7 +319,7 @@ class OpenAIAPIModel:
             with savepath.open("r") as fp:
                 outputs = json.load(fp)
                 if response_format is not None:
-                    validate_schema(schema=response_format.model_json_schema(), response=json.dumps(outputs))
+                    validate(schema=response_format.model_json_schema(), response=outputs)
                 return outputs
         elif self.ignore_not_found:
             return None
