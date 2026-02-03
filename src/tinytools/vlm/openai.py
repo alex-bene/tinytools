@@ -257,8 +257,11 @@ class OpenAIAPIModel:
             logger.warning("Failed to generate response. Maybe check your prompt.")
             return None
 
-        msg = f"Error encountered after {self.max_retries} retries."
-        raise RuntimeError(msg) from exception
+        exception.args = (
+            f"Error encountered after {self.max_retries} retries Original error: {exception.args[0]}",
+            *exception.args[1:],
+        )
+        raise exception
 
     async def single_forward(
         self,
