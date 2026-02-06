@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import math
+from typing import TYPE_CHECKING
 
 import numpy as np
 from PIL import Image
+
+if TYPE_CHECKING:
+    import torch  # pyright: ignore[reportMissingImports]
 
 
 def img_from_array(img_array: np.ndarray, is_bgr: bool = False) -> Image.Image:
@@ -158,3 +162,30 @@ def image_grid(
         grid.paste(paste_img, (paste_x, paste_y))
 
     return grid
+
+
+def tensor_to_pil(
+    tensor: torch.Tensor, mean: torch.Tensor | None = None, std: torch.Tensor | None = None, clamp: bool = True
+) -> Image.Image:
+    """Convert a torch tensor to a PIL Image.
+
+    Args:
+        tensor: A torch tensor of shape (C, H, W) with values in the range [0, 1] if mean and std are None, or
+            normalized with the given mean and std if they are not None.
+        mean: A torch tensor of shape (C,) representing the mean used for normalization.
+            If None, no mean is subtracted. Defaults to None.
+        std: A torch tensor of shape (C,) representing the standard deviation used for normalization.
+            If None, no division is performed. Defaults to None.
+        clamp: A boolean indicating whether to clamp the output values to the range [0, 1]. Defaults to True.
+
+    Returns:
+        A PIL Image object.
+
+    """
+    if mean is not None:
+        tensor = tensor + mean[:, None, None]
+    if std is not None:
+        tensor = tensor * std[:, None, None]
+    if clamp:
+        tensor = tensor.clamp(0, 1)
+    return Image.fromarray((tensor.detach().cpu().numpy() * 255).astype(np.uint8))

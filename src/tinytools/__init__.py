@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Any
 
 from .archives import safe_tar_extract_all, safe_zip_extract_all
 from .camera import focal_to_fov, fov_to_focal
-from .image import image_grid, img_from_array, imgs_from_array_batch
+from .image import image_grid, img_from_array, imgs_from_array_batch, tensor_to_pil
 from .imports import module_available, module_from_obj, requires
 from .logger import get_logger, setup_prettier_logger
 from .metaclasses import FrozenNamespaceMeta
@@ -94,6 +94,7 @@ __all__ = [
     "suppress_logging",
     "suppress_output",
     "suppress_tqdm",
+    "tensor_to_pil",
     "transform_meshes",
 ]
 
