@@ -44,6 +44,8 @@ ImageType = str | Path | Image
 logger = get_logger(__name__)
 ## Supress 'httpx' logs
 logging.getLogger("httpx").setLevel(logging.WARNING)
+## Supress 'openai' logs
+logging.getLogger("openai").setLevel(logging.WARNING)
 
 
 class OpenAIAPIModel:
