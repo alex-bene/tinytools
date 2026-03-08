@@ -13,14 +13,11 @@ from tqdm import tqdm
 @contextmanager
 def suppress_logging() -> Generator[None, None, None]:
     """Context manager to suppress logging."""
-    logger = logging.getLogger()
-    previous_level = logger.level
     logging.disable(logging.CRITICAL)  # suppress everything
     try:
         yield
     finally:
         logging.disable(logging.NOTSET)  # restore
-        logger.setLevel(previous_level)
 
 
 @contextmanager
