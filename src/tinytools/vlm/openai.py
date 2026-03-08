@@ -42,9 +42,9 @@ ImageType = str | Path | Image
 
 # Setup logger
 logger = get_logger(__name__)
-## Supress 'httpx' logs
+## Suppress 'httpx' logs
 logging.getLogger("httpx").setLevel(logging.WARNING)
-## Supress 'openai' logs
+## Suppress 'openai' logs
 logging.getLogger("openai").setLevel(logging.WARNING)
 
 
@@ -324,7 +324,7 @@ class OpenAIAPIModel:
             with savepath.open("r") as fp:
                 outputs = json.load(fp)
                 if response_format is not None:
-                    validate(schema=response_format.model_json_schema(), response=outputs)
+                    validate(outputs, schema=response_format.model_json_schema())
                 return outputs
         elif self.ignore_not_found:
             return None
