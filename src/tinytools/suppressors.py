@@ -19,7 +19,8 @@ def suppress_logging() -> Generator[None, None, None]:
     try:
         yield
     finally:
-        logging.disable(previous_level)  # restore
+        logging.disable(logging.NOTSET)  # restore
+        logger.setLevel(previous_level)
 
 
 @contextmanager
