@@ -182,10 +182,10 @@ def tensor_to_pil(
         A PIL Image object.
 
     """
-    if mean is not None:
-        tensor = tensor + mean[:, None, None]
     if std is not None:
         tensor = tensor * std[:, None, None]
+    if mean is not None:
+        tensor = tensor + mean[:, None, None]
     if clamp:
         tensor = tensor.clamp(0, 1)
-    return Image.fromarray((tensor.detach().cpu().numpy() * 255).astype(np.uint8))
+    return Image.fromarray((tensor.permute(1, 2, 0).detach().cpu().numpy() * 255).astype(np.uint8))

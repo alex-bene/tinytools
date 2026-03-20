@@ -15,18 +15,27 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+def module_name_from_obj(x: Any) -> str:
+    """Get the module name for a given object."""
+    return type(x).__module__
+
+
+def load_module(module_name: str) -> types.ModuleType:
+    """Load a module by name."""
+    loaded = sys.modules.get(module_name)
+    if loaded is not None:
+        return loaded
+
+    if importlib_util.find_spec(module_name) is not None:
+        return importlib.import_module(module_name)
+
+    msg = f"couldn't load module for '{module_name}'"
+    raise ImportError(msg)
+
+
 def module_from_obj(x: Any) -> types.ModuleType:
     """Get the module for a given object."""
-    top = type(x).__module__
-    try:
-        return importlib.import_module(top)
-    except ImportError:
-        # fallback: search loaded modules for the prefix
-        for name, mod in sys.modules.items():
-            if name == top or name.startswith(top + "."):
-                return mod
-    msg = f"couldn't load module for {type(x)}"
-    raise ImportError(msg)
+    return load_module(module_name_from_obj(x))
 
 
 def module_available(module: str, log_warning: str | None = None) -> bool:

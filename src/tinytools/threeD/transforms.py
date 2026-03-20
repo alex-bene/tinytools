@@ -25,11 +25,6 @@ try:
 except ImportError:
     pt3d_Transform3d = None  # type: ignore[assignment]  # noqa: N816
 
-try:
-    import torch  # pyright: ignore[reportMissingImports]
-except ImportError:
-    torch = None  # type: ignore[assignment]
-
 if TYPE_CHECKING:
     from pytorch3d.structures import Meshes  # pyright: ignore[reportMissingImports]
     from pytorch3d.transforms import Transform3d  # pyright: ignore[reportMissingImports]

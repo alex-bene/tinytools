@@ -21,11 +21,13 @@ class LocationHead(nn.Module):
 
     if TYPE_CHECKING:
 
-        def __call__(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        def __call__(self, hidden_states: torch.Tensor) -> dict[str, torch.Tensor]:
             """Type hinting fix."""
             return self.forward(hidden_states=hidden_states)
 
-    def forward(self, hidden_states: torch.Tensor, hidden_states_depth: torch.Tensor | None = None) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, hidden_states_depth: torch.Tensor | None = None
+    ) -> dict[str, torch.Tensor]:
         """Forward location head."""
         return {
             "xy": self.xy_head(hidden_states),

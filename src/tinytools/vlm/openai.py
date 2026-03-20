@@ -26,12 +26,15 @@ try:
     import torch
     from dotenv import load_dotenv
     from jsonschema import validate
+    from openai import omit
     from pydantic import ValidationError
 except ImportError as e:
     msg = 'LLM features are not available. Please install the required dependencies with: pip install "tinytools[llm]"'
     raise ImportError(msg) from e
 
 if TYPE_CHECKING:
+    from openai import Omit
+    from openai._types import Body
     from pydantic import BaseModel
 else:
     BaseModel = Any
@@ -201,7 +204,14 @@ class OpenAIAPIModel:
         return base64.b64encode(buffer.getvalue()).decode("utf-8")
 
     async def completion_with_retries(
-        self, messages: list[dict[str, str]], response_format: type[BaseModel] | None = None, max_tokens: int = 8192
+        self,
+        messages: list[dict[str, str]],
+        response_format: type[BaseModel] | None | Omit = omit,
+        max_tokens: int = 8192,
+        temperature: float | None | Omit = omit,
+        top_p: float | None | Omit = omit,
+        presence_penalty: float | None | Omit = omit,
+        extra_body: Body | None = None,
     ) -> dict[str, str] | None:
         """Completion with retries.
 
@@ -217,6 +227,13 @@ class OpenAIAPIModel:
             messages (list[dict[str, str]]): The messages to send to the model.
             response_format (BaseModel | None, optional): The response format. Defaults to None.
             max_tokens (int, optional): The maximum number of tokens to generate. Defaults to 8192.
+            temperature (float | None | Omit, optional): Sampling temperature. If None, model defaults apply.
+                Defaults to omit.
+            top_p (float | None | Omit, optional): Nucleus sampling probability. If None, model defaults apply.
+                Defaults to omit.
+            presence_penalty (float | None | Omit, optional): Presence penalty for token generation. If None,
+                model defaults apply. Defaults to omit.
+            extra_body (Body | None, optional): Additional request payload fields for the API call. Defaults to None.
 
         Returns:
             dict[str, str] | None: The response from the model or None if the completion fails after all retries.
@@ -231,8 +248,12 @@ class OpenAIAPIModel:
                 response = await self.client.chat.completions.parse(
                     model=self.model,
                     messages=messages,
-                    response_format=response_format if response_format is not None else openai.omit,
+                    response_format=response_format if response_format is not None else omit,
                     max_tokens=max_tokens,
+                    temperature=temperature,
+                    top_p=top_p,
+                    presence_penalty=presence_penalty,
+                    extra_body=extra_body,
                 )
                 response_content: str = response.choices[0].message.content
 
@@ -274,6 +295,10 @@ class OpenAIAPIModel:
         no_cache: bool | None = None,
         ignore_cache: bool | None = None,
         max_tokens: int = 8192,
+        temperature: float | None | Omit = omit,
+        top_p: float | None | Omit = omit,
+        presence_penalty: float | None | Omit = omit,
+        extra_body: Body | None = None,
     ) -> str:
         """Make a single forward pass through the VLM/LLM with an optional image, system prompt and response format.
 
@@ -286,6 +311,13 @@ class OpenAIAPIModel:
             no_cache (bool | None, optional): Whether to disable caching. Defaults to False.
             ignore_cache (bool | None, optional): Whether to ignore the cache. Defaults to False.
             max_tokens (int, optional): The maximum number of tokens to generate. Defaults to 8192.
+            temperature (float | None | Omit, optional): Sampling temperature. If None, model defaults apply.
+                Defaults to omit.
+            top_p (float | None | Omit, optional): Nucleus sampling probability. If None, model defaults apply.
+                Defaults to omit.
+            presence_penalty (float | None | Omit, optional): Presence penalty for token generation. If None,
+                model defaults apply. Defaults to omit.
+            extra_body (Body | None, optional): Additional request payload fields for the API call. Defaults to None.
 
         Returns:
             str | None: The response from the model.
@@ -303,6 +335,13 @@ class OpenAIAPIModel:
         base64_images = [self.encode_image(image) for image in images] if images is not None else []
 
         # Create unique savepath
+        def _cache_value(value: Any) -> Any:
+            if value is omit:
+                return "__OPENAI_OMIT__"
+            if isinstance(value, dict):
+                return json.dumps(value, sort_keys=True, default=str)
+            return value
+
         hashkey = hashlib.sha256(
             str(
                 [
@@ -310,6 +349,10 @@ class OpenAIAPIModel:
                     prompt,
                     base64_images,
                     response_format.model_json_schema() if response_format is not None else None,
+                    _cache_value(temperature),
+                    _cache_value(top_p),
+                    _cache_value(presence_penalty),
+                    _cache_value(extra_body),
                 ]
             ).encode("utf-8")
         ).hexdigest()
@@ -345,8 +388,12 @@ class OpenAIAPIModel:
         ## Generate reply and apply response_format
         response = await self.completion_with_retries(
             messages=messages,
-            response_format=response_format if response_format is not None else openai.omit,
+            response_format=response_format if response_format is not None else omit,
             max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            presence_penalty=presence_penalty,
+            extra_body=extra_body,
         )  # returns None if failed
 
         ## Check if the model did not finish as expected
@@ -381,6 +428,10 @@ class OpenAIAPIModel:
         no_cache: bool = False,
         ignore_cache: bool | None = None,
         max_tokens: int = 8192,
+        temperature: float | None | Omit = omit,
+        top_p: float | None | Omit = omit,
+        presence_penalty: float | None | Omit = omit,
+        extra_body: Body | None = None,
     ) -> list[str | None]:
         """Make a forward pass through the VLM/LLM with optional images, system prompts and response format.
 
@@ -395,6 +446,13 @@ class OpenAIAPIModel:
             no_cache (bool | None, optional): Whether to disable caching. Defaults to False.
             ignore_cache (bool | None, optional): Whether to ignore the cache. Defaults to None.
             max_tokens (int, optional): The maximum number of tokens to generate. Defaults to 8192.
+            temperature (float | None | Omit, optional): Sampling temperature. If None, model defaults apply.
+                Defaults to omit.
+            top_p (float | None | Omit, optional): Nucleus sampling probability. If None, model defaults apply.
+                Defaults to omit.
+            presence_penalty (float | None | Omit, optional): Presence penalty for token generation. If None,
+                model defaults apply. Defaults to omit.
+            extra_body (Body | None, optional): Additional request payload fields for the API call. Defaults to None.
 
         Returns:
             list[str | None]: The responses from the model.
@@ -412,6 +470,10 @@ class OpenAIAPIModel:
                 no_cache=no_cache,
                 ignore_cache=ignore_cache,
                 max_tokens=max_tokens,
+                temperature=temperature,
+                top_p=top_p,
+                presence_penalty=presence_penalty,
+                extra_body=extra_body,
             )
             for idx, prompt in enumerate(prompts)
         ]
@@ -428,6 +490,10 @@ class OpenAIAPIModel:
         no_cache: bool | None = None,
         ignore_cache: bool | None = None,
         max_tokens: int = 8192,
+        temperature: float | None | Omit = omit,
+        top_p: float | None | Omit = omit,
+        presence_penalty: float | None | Omit = omit,
+        extra_body: Body | None = None,
     ) -> list[str | None]:
         """Make a forward pass through the VLM/LLM with optional images, system prompts and response format.
 
@@ -442,6 +508,13 @@ class OpenAIAPIModel:
             no_cache (bool | None, optional): Whether to disable caching. Defaults to False.
             ignore_cache (bool | None, optional): Whether to ignore the cache. Defaults to None.
             max_tokens (int, optional): The maximum number of tokens to generate. Defaults to 8192.
+            temperature (float | None | Omit, optional): Sampling temperature. If None, model defaults apply.
+                Defaults to omit.
+            top_p (float | None | Omit, optional): Nucleus sampling probability. If None, model defaults apply.
+                Defaults to omit.
+            presence_penalty (float | None | Omit, optional): Presence penalty for token generation. If None,
+                model defaults apply. Defaults to omit.
+            extra_body (Body | None, optional): Additional request payload fields for the API call. Defaults to None.
 
         Returns:
             list[str | None]: The responses from the model.
@@ -457,6 +530,10 @@ class OpenAIAPIModel:
             no_cache=no_cache,
             ignore_cache=ignore_cache,
             max_tokens=max_tokens,
+            temperature=temperature,
+            top_p=top_p,
+            presence_penalty=presence_penalty,
+            extra_body=extra_body,
         )
 
         try:
