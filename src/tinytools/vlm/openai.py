@@ -7,9 +7,6 @@ import base64
 import hashlib
 import json
 import logging
-import subprocess
-import sys
-import time
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
 from pathlib import Path
@@ -19,11 +16,9 @@ from PIL.Image import Image
 from tqdm.asyncio import tqdm_asyncio
 
 from tinytools.logger import get_logger
-from tinytools.suppressors import suppress_logging
 
 try:
     import openai
-    import torch
     from dotenv import load_dotenv
     from jsonschema import validate
     from openai import omit
@@ -67,8 +62,6 @@ class OpenAIAPIModel:
         timeout: int = 600,
         project: str | None = None,
         organization: str | None = None,
-        vllm_gpu_id: int = 0,
-        vllm_port: int = 8000,
     ) -> None:
         """Initialize the LiteLLM model.
 
@@ -84,8 +77,6 @@ class OpenAIAPIModel:
             timeout (int, optional): The timeout for requests in seconds. Defaults to 600.
             project (str | None, optional): The project to use. Defaults to None.
             organization (str | None, optional): The organization to use. Defaults to None.
-            vllm_gpu_id (int, optional): The GPU ID to use. Defaults to 0.
-            vllm_port (int, optional): The port to use for the vLLM engine. Defaults to 8000.
 
         """
         super().__init__()
@@ -94,9 +85,6 @@ class OpenAIAPIModel:
         self.ignore_not_found = ignore_not_found
         self.ignore_cache = ignore_cache
         self.no_cache = no_cache
-        self.vllm_gpu_id = vllm_gpu_id
-        self.vllm_port = vllm_port
-        self.vllm_engine_process = None
 
         # Use the async client from the openai library
         self.client = openai.AsyncOpenAI(
@@ -113,84 +101,6 @@ class OpenAIAPIModel:
         )
         self.cache_folder /= model.lower()
         self.cache_folder.mkdir(exist_ok=True, parents=True)
-
-    def vllm_engine_running(self) -> bool:
-        """Check if the vLLM engine is running."""
-        try:
-            self.forward(["test"], no_progress_bar=True, no_cache=True, ignore_cache=True)
-        except openai.APIConnectionError:
-            return False
-        else:
-            return True
-
-    def vllm_engine_start(self, synchronous: bool = False) -> subprocess.Popen | None:
-        """Start the VLLM engine."""
-        with suppress_logging():
-            is_running = self.vllm_engine_running()
-        if is_running:
-            logger.info("vLLM engine already running")
-            return None
-
-        # Basic inputs validation
-        if not isinstance(self.model, str) or not self.model.isprintable():
-            msg = "Invalid model name"
-            raise ValueError(msg)
-        if not isinstance(self.vllm_port, int) or not (0 < self.vllm_port < 65536):
-            msg = "Invalid port number"
-            raise ValueError(msg)
-        if not isinstance(self.vllm_gpu_id, int) or torch.cuda.device_count() < self.vllm_gpu_id < 0:
-            msg = "Invalid GPU ID"
-            raise ValueError(msg)
-
-        self.vllm_engine_process = subprocess.Popen(  # noqa: S603
-            [
-                sys.executable,
-                "-m",
-                "vllm.entrypoints.openai.api_server",
-                "--model",
-                self.model,
-                "--headless",
-                "--dtype",
-                "auto",
-                "--limit-mm-per-prompt",
-                '{"image":1,"video":0}',
-                "--port",
-                str(self.vllm_port),
-            ],
-            env={"CUDA_VISIBLE_DEVICES": str(self.vllm_gpu_id)},
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            universal_newlines=True,
-            start_new_session=True,
-        )
-        if synchronous:
-            with suppress_logging():
-                while not self.vllm_engine_running() and self.vllm_engine_process.poll() is None:
-                    time.sleep(1)
-        return self.vllm_engine_process
-
-    def vllm_engine_stop(self) -> None:
-        """Stop the vLLM engine gracefully."""
-        if not self.vllm_engine_running():
-            logger.info("vLLM engine not running")
-            return
-
-        if self.vllm_engine_process:
-            try:
-                # Terminate the process
-                self.vllm_engine_process.terminate()
-                self.vllm_engine_process.wait(timeout=10)
-                logger.info("Stopped vLLM engine (PID: %d)", self.vllm_engine_process.pid)
-            except subprocess.TimeoutExpired:
-                # Force kill if it doesn't terminate gracefully
-                self.vllm_engine_process.kill()
-                logger.info("Force killed vLLM engine (PID: %d)", self.vllm_engine_process.pid)
-            except Exception:
-                logger.exception("Error stopping vLLM engine")
-            finally:
-                self.vllm_engine_process = None
-        else:
-            logger.info("vLLM engine was not started from this process")
 
     @staticmethod
     def encode_image(image: ImageType) -> str:
