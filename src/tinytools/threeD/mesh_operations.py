@@ -28,6 +28,7 @@ def simplify_mesh(  # noqa: PLR0911
     clean_topology: bool = False,
     fill_holes: bool = False,
     preserving_visual: bool = True,
+    device: torch.device | str | None = None,
 ) -> trimesh.Trimesh:
     """Simplify a trimesh via quadric decimation while, optionally, preserving its visual representation.
 
@@ -69,6 +70,8 @@ def simplify_mesh(  # noqa: PLR0911
             before boundary loops are detected. Default: False.
         preserving_visual (bool, optional): If True, transfer the source visual to the simplified
             mesh. Default: True.
+        device (torch.device | str, optional): Device for PyTorch3D-accelerated visual transfer.
+            If None, uses trimesh CPU implementation. Default: None.
 
     Returns:
         trimesh.Trimesh: Simplified mesh with preserved visual, or the original mesh on fallback.
@@ -109,7 +112,7 @@ def simplify_mesh(  # noqa: PLR0911
         return simplified
 
     try:
-        transfer_visual(mesh_source=mesh, mesh_target=simplified)
+        transfer_visual(mesh_source=mesh, mesh_target=simplified, device=device)
     except (RuntimeError, TypeError, ValueError):
         logger.warning(
             "Visual transfer to simplified mesh failed; returning simplified mesh without visual.", exc_info=True
