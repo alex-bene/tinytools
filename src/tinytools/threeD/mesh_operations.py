@@ -10,9 +10,11 @@ from tinytools import get_logger
 from tinytools.imports import optional_module
 
 if TYPE_CHECKING:
+    import torch
     import trimesh
 else:
     trimesh = optional_module("trimesh")
+    torch = optional_module("torch")
 
 logger = get_logger(__name__)
 
@@ -115,7 +117,9 @@ def simplify_mesh(  # noqa: PLR0911
     return simplified
 
 
-def transfer_visual(*, mesh_source: trimesh.Trimesh, mesh_target: trimesh.Trimesh) -> None:
+def transfer_visual(
+    *, mesh_source: trimesh.Trimesh, mesh_target: trimesh.Trimesh, device: torch.device | str | None = None
+) -> None:
     """Attach source visual (texture / vertex colors / face colors) to a target mesh in place.
 
     For each target vertex (or face centroid, for face colors), the closest point on the source
@@ -127,6 +131,8 @@ def transfer_visual(*, mesh_source: trimesh.Trimesh, mesh_target: trimesh.Trimes
     Args:
         mesh_source (trimesh.Trimesh): Source mesh carrying the visual to transfer.
         mesh_target (trimesh.Trimesh): Target mesh whose ``visual`` will be updated in place.
+        device (torch.device | str, optional): Device for PyTorch3D-accelerated closest point
+            computation. If None, uses trimesh CPU implementation. Default: None.
 
     """
     source_visual = getattr(mesh_source, "visual", None)
@@ -142,7 +148,7 @@ def transfer_visual(*, mesh_source: trimesh.Trimesh, mesh_target: trimesh.Trimes
             and source_visual.material is not None
         ):
             triangle_ids, barycentric = _closest_triangle_barycentric(
-                mesh_source=mesh_source, query_points=np.asarray(mesh_target.vertices, dtype=np.float64)
+                mesh_source=mesh_source, query_points=np.asarray(mesh_target.vertices, dtype=np.float64), device=device
             )
             if triangle_ids is not None and barycentric is not None:
                 source_faces = np.asarray(mesh_source.faces, dtype=np.int64)
@@ -159,7 +165,7 @@ def transfer_visual(*, mesh_source: trimesh.Trimesh, mesh_target: trimesh.Trimes
         source_colors = _as_rgba_uint8(np.asarray(source_visual.vertex_colors), expected_rows=len(mesh_source.vertices))
         if source_colors is not None:
             triangle_ids, barycentric = _closest_triangle_barycentric(
-                mesh_source=mesh_source, query_points=np.asarray(mesh_target.vertices, dtype=np.float64)
+                mesh_source=mesh_source, query_points=np.asarray(mesh_target.vertices, dtype=np.float64), device=device
             )
             if triangle_ids is not None and barycentric is not None:
                 source_faces = np.asarray(mesh_source.faces, dtype=np.int64)
@@ -173,30 +179,225 @@ def transfer_visual(*, mesh_source: trimesh.Trimesh, mesh_target: trimesh.Trimes
         source_face_colors = _as_rgba_uint8(np.asarray(source_visual.face_colors), expected_rows=len(mesh_source.faces))
         if source_face_colors is not None:
             centroids = np.asarray(mesh_target.triangles_center, dtype=np.float64)
-            _, _, triangle_ids = trimesh.proximity.closest_point(mesh_source, centroids)
+            triangle_ids, _ = _closest_triangle_barycentric(
+                mesh_source=mesh_source, query_points=centroids, device=device
+            )
             if triangle_ids is not None and len(triangle_ids) == len(centroids):
-                triangle_ids = np.asarray(triangle_ids, dtype=np.int64)
                 mesh_target.visual = trimesh.visual.ColorVisuals(
                     mesh=mesh_target, face_colors=source_face_colors[triangle_ids]
                 )
                 return
 
 
+def _closest_triangle_barycentric_pt3d(
+    *, triangles: np.ndarray, query_points: np.ndarray, device: torch.device | str
+) -> tuple[np.ndarray | None, np.ndarray | None]:
+    """PyTorch3D-accelerated closest point on triangles with barycentric coordinates.
+
+    Uses PyTorch3D's internal CUDA kernel for fast closest-face lookup, then computes
+    barycentric coordinates on the closest faces. The kernel only accepts float32 inputs; on
+    meshes with very small triangles it can return far-away faces with near-zero distances unless
+    the geometry is normalized first. Centering and scaling are therefore part of the algorithm,
+    not cosmetic preprocessing.
+
+    Args:
+        triangles (np.ndarray): Triangle vertices. Shape: (F, 3, 3).
+        query_points (np.ndarray): Points to project. Shape: (N, 3).
+        device (torch.device | str): Device for computation.
+
+    Returns:
+        tuple[np.ndarray | None, np.ndarray | None]: (triangle_ids, barycentric_weights).
+            Shapes: (N,) and (N, 3).
+
+    """
+    from pytorch3d import _C  # noqa: PLC0415
+
+    triangles_np = np.asarray(triangles, dtype=np.float64)
+    query_points_np = np.asarray(query_points, dtype=np.float64)
+
+    center = triangles_np.reshape(-1, 3).mean(axis=0)
+    edge_01 = triangles_np[:, 1] - triangles_np[:, 0]
+    edge_02 = triangles_np[:, 2] - triangles_np[:, 0]
+    triangle_areas = 0.5 * np.linalg.norm(np.cross(edge_01, edge_02), axis=1)
+    positive_areas = triangle_areas[triangle_areas > 0]
+    scale = 1.0 / max(float(np.sqrt(np.median(positive_areas))), 1e-12) if len(positive_areas) > 0 else 1.0
+
+    normalized_triangles = (triangles_np - center) * scale
+    normalized_query_points = (query_points_np - center) * scale
+
+    # Keep this normalization even though closest-point queries are scale/translation invariant.
+    # The PyTorch3D C kernel is float32-only and was observed to choose far-away triangles on
+    # tiny-triangle meshes when called in the original coordinate scale.
+    tris_f32 = torch.as_tensor(normalized_triangles, dtype=torch.float32, device=device)
+    pts_f32 = torch.as_tensor(normalized_query_points, dtype=torch.float32, device=device)
+
+    n_pts = pts_f32.shape[0]
+
+    # Use PyTorch3D's CUDA kernel for fast closest face lookup
+    pts_first_idx = torch.tensor([0], dtype=torch.int64, device=device)
+    tris_first_idx = torch.tensor([0], dtype=torch.int64, device=device)
+
+    min_triangle_area = 1e-8 * scale * scale
+    _, triangle_ids = _C.point_face_dist_forward(
+        pts_f32, pts_first_idx, tris_f32, tris_first_idx, n_pts, min_triangle_area
+    )
+
+    # Convert to float64 for higher precision in barycentric computation
+    tris = tris_f32.to(torch.float64)
+    pts = pts_f32.to(torch.float64)
+
+    # Gather the closest triangles for each query point
+    closest_tris = tris[triangle_ids]  # (N, 3, 3)
+
+    # Two-step approach (mirrors trimesh):
+    # 1. Compute actual closest points on the triangles
+    closest_pts = _closest_point_on_triangles(pts, closest_tris)
+    # 2. Compute barycentric coordinates for points that are ON the triangles
+    barycentric = _points_to_barycentric(closest_pts, closest_tris)
+
+    triangle_ids_np = triangle_ids.cpu().numpy().astype(np.int64)
+    barycentric_np = barycentric.cpu().numpy().astype(np.float64)
+
+    if not np.isfinite(barycentric_np).all():
+        return None, None
+    return triangle_ids_np, barycentric_np
+
+
+def _closest_point_on_edge(points: torch.Tensor, edge_start: torch.Tensor, edge_end: torch.Tensor) -> torch.Tensor:
+    """Compute closest point on edge segment for each query point.
+
+    Args:
+        points (torch.Tensor): Query points. Shape: (N, 3).
+        edge_start (torch.Tensor): Edge start vertices. Shape: (N, 3).
+        edge_end (torch.Tensor): Edge end vertices. Shape: (N, 3).
+
+    Returns:
+        torch.Tensor: Closest points on edges. Shape: (N, 3).
+
+    """
+    edge = edge_end - edge_start
+    edge_len_sq = (edge * edge).sum(dim=-1, keepdim=True).clamp(min=1e-12)
+    t = ((points - edge_start) * edge).sum(dim=-1, keepdim=True) / edge_len_sq
+    t = t.clamp(0, 1)
+    return edge_start + t * edge
+
+
+def _closest_point_on_triangles(points: torch.Tensor, triangles: torch.Tensor) -> torch.Tensor:
+    """Compute the closest point on each triangle to the corresponding query point.
+
+    Args:
+        points (torch.Tensor): Query points. Shape: (N, 3).
+        triangles (torch.Tensor): Triangle vertices, one per point. Shape: (N, 3, 3).
+
+    Returns:
+        torch.Tensor: Closest points on triangles. Shape: (N, 3).
+
+    """
+    v0 = triangles[:, 0]
+    v1 = triangles[:, 1]
+    v2 = triangles[:, 2]
+
+    # Project point onto triangle plane and get barycentric coords
+    e0 = v1 - v0
+    e1 = v2 - v0
+    d = points - v0
+
+    d00 = (e0 * e0).sum(dim=-1)
+    d01 = (e0 * e1).sum(dim=-1)
+    d11 = (e1 * e1).sum(dim=-1)
+    d20 = (d * e0).sum(dim=-1)
+    d21 = (d * e1).sum(dim=-1)
+
+    denom = (d00 * d11 - d01 * d01).clamp(min=1e-12)
+    v = (d11 * d20 - d01 * d21) / denom  # barycentric coord for v1
+    w = (d00 * d21 - d01 * d20) / denom  # barycentric coord for v2
+    u = 1 - v - w  # barycentric coord for v0
+
+    # Project onto plane: this is the closest point IF inside triangle
+    normal = torch.cross(e0, e1, dim=-1)
+    normal_len_sq = (normal * normal).sum(dim=-1, keepdim=True).clamp(min=1e-12)
+    normal_unit = normal / normal_len_sq.sqrt()
+    dist_to_plane = (d * normal_unit).sum(dim=-1, keepdim=True)
+    plane_proj = points - dist_to_plane * normal_unit
+
+    # Check if inside triangle (all barycentric coords >= 0)
+    inside = (u >= 0) & (v >= 0) & (w >= 0)
+
+    # For points outside, compute closest point on each edge and pick nearest
+    closest_e01 = _closest_point_on_edge(points, v0, v1)
+    closest_e12 = _closest_point_on_edge(points, v1, v2)
+    closest_e02 = _closest_point_on_edge(points, v0, v2)
+
+    dist_e01 = ((points - closest_e01) ** 2).sum(dim=-1)
+    dist_e12 = ((points - closest_e12) ** 2).sum(dim=-1)
+    dist_e02 = ((points - closest_e02) ** 2).sum(dim=-1)
+
+    # Find which edge is closest
+    _, min_idx = torch.stack([dist_e01, dist_e12, dist_e02], dim=-1).min(dim=-1)
+    edge_closest = torch.stack([closest_e01, closest_e12, closest_e02], dim=1)
+    closest_on_edge = edge_closest[torch.arange(len(points), device=points.device), min_idx]
+
+    # Use plane projection if inside, edge projection if outside
+    return torch.where(inside.unsqueeze(-1), plane_proj, closest_on_edge)
+
+
+def _points_to_barycentric(points: torch.Tensor, triangles: torch.Tensor) -> torch.Tensor:
+    """Compute barycentric coordinates for points on triangles.
+
+    Assumes points are already on the triangle plane.
+
+    Args:
+        points (torch.Tensor): Points on triangles. Shape: (N, 3).
+        triangles (torch.Tensor): Triangle vertices. Shape: (N, 3, 3).
+
+    Returns:
+        torch.Tensor: Barycentric coordinates (w0, w1, w2). Shape: (N, 3).
+
+    """
+    v0 = triangles[:, 0]
+    v1 = triangles[:, 1]
+    v2 = triangles[:, 2]
+
+    e0 = v1 - v0
+    e1 = v2 - v0
+    e2 = points - v0
+
+    d00 = (e0 * e0).sum(dim=-1)
+    d01 = (e0 * e1).sum(dim=-1)
+    d11 = (e1 * e1).sum(dim=-1)
+    d20 = (e2 * e0).sum(dim=-1)
+    d21 = (e2 * e1).sum(dim=-1)
+
+    denom = (d00 * d11 - d01 * d01).clamp(min=1e-12)
+    w1 = (d11 * d20 - d01 * d21) / denom
+    w2 = (d00 * d21 - d01 * d20) / denom
+    w0 = 1 - w1 - w2
+
+    return torch.stack([w0, w1, w2], dim=-1)
+
+
 def _closest_triangle_barycentric(
-    *, mesh_source: trimesh.Trimesh, query_points: np.ndarray
+    *, mesh_source: trimesh.Trimesh, query_points: np.ndarray, device: torch.device | str | None = None
 ) -> tuple[np.ndarray | None, np.ndarray | None]:
     """Project query points onto the source mesh and return barycentric weights on the hit triangle.
 
     Args:
         mesh_source (trimesh.Trimesh): Source mesh.
         query_points (np.ndarray): Points to project. Shape: (N, 3).
+        device (torch.device | str, optional): Device for PyTorch3D-accelerated computation.
+            If None, uses trimesh CPU implementation. Default: None.
 
     Returns:
         tuple[np.ndarray | None, np.ndarray | None]: (triangle_ids, barycentric_weights). Returns
-            ``(None, None)`` when the projection or barycentric computation produces non-finite
-            values. Shapes: (N,) and (N, 3).
+            ``(None, None)`` when the projection or barycentric computation produces non-finite values.
+            Shapes: (N,) and (N, 3).
 
     """
+    if device is not None and torch.device(device).type != "cpu":
+        return _closest_triangle_barycentric_pt3d(
+            triangles=mesh_source.triangles, query_points=query_points, device=device
+        )
+
     closest_points, _, triangle_ids = trimesh.proximity.closest_point(mesh_source, query_points)
     if not np.isfinite(closest_points).all():
         return None, None
