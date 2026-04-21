@@ -2,19 +2,18 @@
 
 from __future__ import annotations
 
-import contextlib
 from typing import TYPE_CHECKING
 
 import numpy as np
 from PIL import Image
 
-from .imports import module_available
-
-with contextlib.suppress(ImportError):
-    import torch  # pyright: ignore[reportMissingImports]
+from .imports import module_available, optional_module
 
 if TYPE_CHECKING:
+    import torch  # pyright: ignore[reportMissingImports]
     from torch import Tensor  # pyright: ignore[reportMissingImports]
+else:
+    torch = optional_module("torch", extra="torch")
 
 
 def resize(  # noqa: PLR0912

@@ -2,7 +2,14 @@
 
 from __future__ import annotations
 
-import torch
+from typing import TYPE_CHECKING
+
+from tinytools.imports import optional_module
+
+if TYPE_CHECKING:
+    import torch  # pyright: ignore[reportMissingImports]
+else:
+    torch = optional_module("torch")
 
 
 def get_scale_and_shift(

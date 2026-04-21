@@ -4,13 +4,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Callable
 
-import torch.nn.functional as F  # pyright: ignore[reportMissingImports]
-from torch import nn  # pyright: ignore[reportMissingImports]
-
+from tinytools.imports import optional_attr, optional_module
 from tinytools.logger import get_logger
 
 if TYPE_CHECKING:
     import torch  # pyright: ignore[reportMissingImports]
+    import torch.nn.functional as F  # pyright: ignore[reportMissingImports]
+    from torch import nn  # pyright: ignore[reportMissingImports]
+else:
+    F = optional_module("torch.nn.functional", package="torch", extra="torch")
+    nn = optional_attr("torch", "nn", extra="torch")
 
 
 logger = get_logger(__name__)

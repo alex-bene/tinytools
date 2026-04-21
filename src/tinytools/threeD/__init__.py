@@ -50,6 +50,8 @@ _LAZY_MAPPING = {
     "get_scale_and_shift": ".utils",
 }
 
+__all__ = tuple(sorted(_LAZY_MAPPING))
+
 
 def __getattr__(name: str) -> Any:
     if name in _LAZY_MAPPING:

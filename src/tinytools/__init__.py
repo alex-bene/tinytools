@@ -4,11 +4,23 @@ from typing import TYPE_CHECKING, Any
 from .archives import safe_tar_extract_all, safe_zip_extract_all
 from .camera import focal_to_fov, fov_to_focal
 from .image import image_grid, img_from_array, imgs_from_array_batch, tensor_to_pil
-from .imports import load_module, module_available, module_from_obj, module_name_from_obj, requires
+from .imports import (
+    MissingOptionalDependency,
+    load_module,
+    module_available,
+    module_from_obj,
+    module_name_from_obj,
+    optional_attr,
+    optional_module,
+    requires,
+)
 from .logger import get_logger, setup_prettier_logger
+from .mask_bbox_tools import bboxes_center, pad_bboxes
 from .metaclasses import FrozenNamespaceMeta
-from .process_annotations import bbox_center, pad_bboxes, process_bboxes, process_seg_masks
+from .process_annotations import process_bboxes, process_seg_masks
 from .suppressors import suppress_logging, suppress_output, suppress_tqdm
+from .threeD import _LAZY_MAPPING as _THREED_LAZY_MAPPING
+from .torch import _LAZY_MAPPING as _TORCH_LAZY_MAPPING
 from .tqdm import setup_prettier_tqdm
 from .transforms import resize
 from .video import get_video_fps, load_video, load_videos, save_video
@@ -50,11 +62,14 @@ _EAGER_EXPORTS = [
     "img_from_array",
     "imgs_from_array_batch",
     "load_module",
+    "MissingOptionalDependency",
     "load_video",
     "load_videos",
     "module_available",
     "module_from_obj",
     "module_name_from_obj",
+    "optional_attr",
+    "optional_module",
     "pad_bboxes",
     "process_bboxes",
     "process_seg_masks",
@@ -71,38 +86,13 @@ _EAGER_EXPORTS = [
     "tensor_to_pil",
 ]
 
-# An internal mapping from the public name to its source module.
-_LAZY_MAPPING = {
-    "OpenAIAPIModel": ".vlm.openai",
-    "pt3d_to_trimesh": ".threeD.mesh_conversions",
-    "transform_meshes": ".threeD.transforms",
-    "decompose_transform": ".threeD.transforms",
-    "compose_transform": ".threeD.transforms",
-    "DecomposedTransform": ".threeD.transforms",
-    "CoordinateConversions": ".threeD.coordinate_conversions",
-    "Pose3D": ".threeD.pose3d",
-    "GatedMLP": ".torch.modules.gated_mlp",
-    "FFBlock": ".torch.modules.ff_block",
-    "ConstantLayer": ".torch.modules.constant_layer",
-    "VanillaMLP": ".torch.modules.vanilla_mlp",
-    "freeze_module": ".torch.utils",
-    "LocationHead": ".torch.modules.location_head",
-    "ApparentSize": ".threeD.pose_target",
-    "DisparitySpace": ".threeD.pose_target",
-    "Identity": ".threeD.pose_target",
-    "LogarithmicDisparitySpace": ".threeD.pose_target",
-    "Naive": ".threeD.pose_target",
-    "NormalizedSceneScale": ".threeD.pose_target",
-    "NormalizedSceneScaleAndTranslation": ".threeD.pose_target",
-    "PoseTarget": ".threeD.pose_target",
-    "PoseTargetFactory": ".threeD.pose_target",
-    "ScaleShiftInvariant": ".threeD.pose_target",
-    "ScaleShiftInvariantWTranslationScale": ".threeD.pose_target",
-    "broadcast_postcompose": ".threeD.transforms",
-    "get_scale_and_shift": ".threeD.utils",
-}
+_THREED_LAZY_EXPORTS = {name: f".threeD{module_path}" for name, module_path in _THREED_LAZY_MAPPING.items()}
+_TORCH_LAZY_EXPORTS = dict.fromkeys(_TORCH_LAZY_MAPPING, ".torch")
 
-__all__ = sorted([*_EAGER_EXPORTS, *_LAZY_MAPPING])  # noqa: PLE0605
+# An internal mapping from the public name to its source module.
+_LAZY_MAPPING = {"OpenAIAPIModel": ".vlm.openai", **_THREED_LAZY_EXPORTS, **_TORCH_LAZY_EXPORTS}
+
+__all__ = tuple(sorted([*_EAGER_EXPORTS, *_LAZY_MAPPING]))
 
 
 def __getattr__(name: str) -> Any:

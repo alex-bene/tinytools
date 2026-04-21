@@ -20,28 +20,27 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-import torch
-
-from tinytools.imports import requires
+from tinytools.imports import optional_attr, optional_module
 from tinytools.logger import get_logger
-from tinytools.torch import get_zero_safe_values
 
 from .transforms import broadcast_postcompose
 
-try:
-    from pytorch3d.transforms import Transform3d as pt3d_Transform3d  # pyright: ignore[reportMissingImports]
-except ImportError:
-    pt3d_Transform3d = None  # type: ignore[assignment]  # noqa: N816
-
 if TYPE_CHECKING:
+    import torch  # pyright: ignore[reportMissingImports]
     from pytorch3d.transforms import Transform3d  # pyright: ignore[reportMissingImports]
+    from pytorch3d.transforms import Transform3d as pt3d_Transform3d  # pyright: ignore[reportMissingImports]
+
+    from tinytools.torch import get_zero_safe_values
+else:
+    torch = optional_module("torch")
+    get_zero_safe_values = optional_attr("tinytools.torch", "get_zero_safe_values", package="torch", extra="torch")
+    pt3d_Transform3d = optional_attr("pytorch3d.transforms", "Transform3d", package="pytorch3d")  # noqa: N816
 
 logger = get_logger(__name__)
 
 
 def ssi_to_metric(scale: torch.Tensor | None, shift: torch.Tensor | None) -> Transform3d:
     """Get the Transform3d that converts Scale-Shift-Invariant coordinates to Metric coordinates."""
-    requires("pytorch3d", "-> ssi_to_metric")
     if shift is None and scale is None:
         msg = "At least one of scale or shift must be provided to define the SSI to Metric transform."
         raise ValueError(msg)
@@ -378,7 +377,6 @@ class ScaleShiftInvariant(PoseTarget):
 
     def __post_init__(self) -> None:
         """Ensure pytorch3d is available and scene params are set."""
-        requires("pytorch3d", "-> ScaleShiftInvariant")
         if self.scene_scale is None and self.scene_center is None:
             msg = f"scene_scale or scene_center must be provided for {self.pose_target_convention} PoseTarget."
             raise ValueError(msg)

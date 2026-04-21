@@ -8,13 +8,13 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, NamedTuple
 
-import torch
+from tinytools.imports import optional_attr, optional_module
 
-from tinytools.imports import requires
-
-try:
-    from pytorch3d.transforms import Transform3d as pt3d_Transform3d  # pyright: ignore[reportMissingImports]
+if TYPE_CHECKING:
+    import torch  # pyright: ignore[reportMissingImports]
+    from pytorch3d.structures import Meshes  # pyright: ignore[reportMissingImports]
     from pytorch3d.transforms import (  # pyright: ignore[reportMissingImports]
+        Transform3d,  # pyright: ignore[reportMissingImports]
         axis_angle_to_matrix,
         matrix_to_axis_angle,
         matrix_to_quaternion,
@@ -22,13 +22,17 @@ try:
         quaternion_to_matrix,
         rotation_6d_to_matrix,
     )
-except ImportError:
-    pt3d_Transform3d = None  # type: ignore[assignment]  # noqa: N816
-
-if TYPE_CHECKING:
-    from pytorch3d.structures import Meshes  # pyright: ignore[reportMissingImports]
-    from pytorch3d.transforms import Transform3d  # pyright: ignore[reportMissingImports]
+    from pytorch3d.transforms import Transform3d as pt3d_Transform3d  # pyright: ignore[reportMissingImports]
     from torch import Tensor
+else:
+    torch = optional_module("torch")
+    pt3d_Transform3d = optional_attr("pytorch3d.transforms", "Transform3d", package="pytorch3d")  # noqa: N816
+    axis_angle_to_matrix = optional_attr("pytorch3d.transforms", "axis_angle_to_matrix", package="pytorch3d")
+    matrix_to_axis_angle = optional_attr("pytorch3d.transforms", "matrix_to_axis_angle", package="pytorch3d")
+    matrix_to_quaternion = optional_attr("pytorch3d.transforms", "matrix_to_quaternion", package="pytorch3d")
+    matrix_to_rotation_6d = optional_attr("pytorch3d.transforms", "matrix_to_rotation_6d", package="pytorch3d")
+    quaternion_to_matrix = optional_attr("pytorch3d.transforms", "quaternion_to_matrix", package="pytorch3d")
+    rotation_6d_to_matrix = optional_attr("pytorch3d.transforms", "rotation_6d_to_matrix", package="pytorch3d")
 
 
 class DecomposedTransform(NamedTuple):  # noqa: D101
@@ -45,32 +49,72 @@ def transform_meshes(meshes: Meshes, transform: Transform3d, inplace: bool = Fal
 
 
 def compose_transform(scale: Tensor, rotation: Tensor, translation: Tensor) -> Transform3d:
-    """Composes a Transform3d from scale, rotation, and translation.
+    """Compose scale, rotation, and translation into a Transform3d.
+
+    The resulting transform applies as: x' = scale * (x @ rotation) + translation.
 
     Args:
-        scale: (B, 3) tensor of scale factors
-        rotation: (B, 3, 3) tensor of rotation matrices
-        translation: (B, 3) tensor of translation vectors
+        scale (Tensor): Scale factor(s). Shape: (B, 3) or (B,) or scalar.
+        rotation (Tensor): Rotation matrix/matrices. Shape: (B, 3, 3) or (3, 3).
+        translation (Tensor): Translation vector(s). Shape: (B, 3) or (3,).
+
+    Returns:
+        Transform3d: Composed transform as a 4x4 homogeneous matrix.
 
     """
-    requires("pytorch3d", "compose_transform requires pytorch3d to be installed.")
+    if rotation.ndim == 2:
+        rotation = rotation.unsqueeze(0)
+    if translation.ndim == 1:
+        translation = translation.unsqueeze(0)
+    if scale.ndim == 0:
+        scale = scale.reshape(1)
     tfm = pt3d_Transform3d(dtype=scale.dtype, device=scale.device)
     return tfm.scale(scale).rotate(rotation).translate(translation)
 
 
-def decompose_transform(transform: Transform3d) -> DecomposedTransform:
-    """Decomposes a Transform3d into scale, rotation, and translation.
+def decompose_transform(
+    transform: Transform3d,
+    *,
+    validate_similarity: bool = True,
+    similarity_rtol: float = 0.01,
+    similarity_atol: float = 1e-8,
+) -> DecomposedTransform:  # SimilarityTransform
+    """Decompose a PyTorch3D Transform3d into rotation, translation, and scale.
+
+    Extracts transform components by computing per-row L2 norms of the linear part.
+    For a true similarity transform (scaled rotation), all row norms are equal.
+
+    Args:
+        transform (Transform3d): PyTorch3D transform(s). Shape: (B, 4, 4).
+        validate_similarity (bool, optional): If True, validates that the transform is a true
+            similarity (all row norms are equal within tolerance). Default: False.
+        similarity_rtol (float, optional): Relative tolerance for row norm equality check when
+            ``validate_similarity=True``. Default: 0.01.
+        similarity_atol (float, optional): Absolute tolerance for row norm equality check when
+            ``validate_similarity=True``. Default: 1e-8.
 
     Returns:
-        scale: (B, 3) tensor of scale factors
-        rotation: (B, 3, 3) tensor of rotation matrices
-        translation: (B, 3) tensor of translation vectors
+        DecomposedTransform: Decomposed transform with scale, rotation, translation fields.
+            Shape: scale (B, 3), rotation (B, 3, 3), translation (B, 3).
+
+    Raises:
+        ValueError: If ``validate_similarity=True`` and row norms are not equal within tolerance,
+            indicating the transform contains shear or anisotropic scaling.
 
     """
     matrices = transform.get_matrix()
-    scale = torch.norm(matrices[:, :3, :3], dim=-1)
-    rotation = matrices[:, :3, :3] / scale.unsqueeze(-1)  # Normalize rotation matrix
-    translation = matrices[:, 3, :3]  # Extract translation vector
+    linear = matrices[:, :3, :3]
+    translation = matrices[:, 3, :3]
+
+    scale = torch.norm(linear, dim=-1)
+    rotation = linear / scale.unsqueeze(-1)
+
+    if validate_similarity:
+        scale_expanded = scale.unsqueeze(-1).expand_as(scale)
+        if not torch.allclose(scale, scale_expanded, rtol=similarity_rtol, atol=similarity_atol):
+            msg = "Transform is not a similarity: row norms differ (shear or anisotropic scaling)."
+            raise ValueError(msg)
+
     return DecomposedTransform(scale, rotation, translation)
 
 

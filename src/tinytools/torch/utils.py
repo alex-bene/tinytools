@@ -1,9 +1,18 @@
 """PyTorch utility functions."""
 
-import torch  # pyright: ignore[reportMissingImports]
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from tinytools.imports import optional_module
+
+if TYPE_CHECKING:
+    import torch  # pyright: ignore[reportMissingImports]
+else:
+    torch = optional_module("torch", extra="torch")
 
 
-def freeze_module(module: "torch.nn.Module") -> None:
+def freeze_module(module: torch.nn.Module) -> None:
     """Freeze all module parameters."""
     for param in module.parameters():
         param.requires_grad = False

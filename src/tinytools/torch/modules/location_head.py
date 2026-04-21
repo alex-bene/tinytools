@@ -4,8 +4,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import torch
-from torch import nn
+from tinytools.imports import optional_attr, optional_module
+
+if TYPE_CHECKING:
+    import torch  # pyright: ignore[reportMissingImports]
+    from torch import nn  # pyright: ignore[reportMissingImports]
+else:
+    torch = optional_module("torch", extra="torch")
+    nn = optional_attr("torch", "nn", extra="torch")
 
 
 class LocationHead(nn.Module):
