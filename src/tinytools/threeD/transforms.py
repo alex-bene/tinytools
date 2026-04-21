@@ -110,8 +110,8 @@ def decompose_transform(
     rotation = linear / scale.unsqueeze(-1)
 
     if validate_similarity:
-        scale_expanded = scale.unsqueeze(-1).expand_as(scale)
-        if not torch.allclose(scale, scale_expanded, rtol=similarity_rtol, atol=similarity_atol):
+        avg_scale = scale.mean(dim=-1, keepdim=True).expand_as(scale)
+        if not torch.allclose(scale, avg_scale, rtol=similarity_rtol, atol=similarity_atol):
             msg = "Transform is not a similarity: row norms differ (shear or anisotropic scaling)."
             raise ValueError(msg)
 
