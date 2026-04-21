@@ -46,7 +46,9 @@ if TYPE_CHECKING:
         decompose_transform,
         get_scale_and_shift,
         pt3d_to_trimesh,
+        simplify_mesh,
         transform_meshes,
+        trimesh_to_pt3d,
     )
     from .torch import ConstantLayer, FFBlock, GatedMLP, LocationHead, VanillaMLP, freeze_module
     from .vlm.openai import OpenAIAPIModel

@@ -3,7 +3,8 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .coordinate_conversions import CoordinateConversions
-    from .mesh_conversions import pt3d_to_trimesh
+    from .mesh_conversions import pt3d_to_trimesh, trimesh_to_pt3d
+    from .mesh_operations import simplify_mesh
     from .pose3d import Pose3D
     from .pose_target import (
         ApparentSize,
@@ -30,6 +31,7 @@ if TYPE_CHECKING:
 _LAZY_MAPPING = {
     "CoordinateConversions": ".coordinate_conversions",
     "pt3d_to_trimesh": ".mesh_conversions",
+    "trimesh_to_pt3d": ".mesh_conversions",
     "Pose3D": ".pose3d",
     "ApparentSize": ".pose_target",
     "DisparitySpace": ".pose_target",
@@ -48,6 +50,7 @@ _LAZY_MAPPING = {
     "decompose_transform": ".transforms",
     "transform_meshes": ".transforms",
     "get_scale_and_shift": ".utils",
+    "simplify_mesh": ".mesh_operations",
 }
 
 __all__ = tuple(sorted(_LAZY_MAPPING))
