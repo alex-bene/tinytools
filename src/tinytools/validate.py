@@ -20,8 +20,8 @@ def validate_shape(array: ArrayTensor, shape: tuple[int | None | EllipsisType, .
     Args:
         array (torch.Tensor | np.ndarray): Tensor/array to validate.
         shape (tuple[int | None | EllipsisType, ...]): Expected shape spec.
-            Use an `int` for an exact size, `None` for any size at that axis,
-            and `...` for any number of middle axes.
+            Use an `int` for an exact size, `None` or `< 0` for any size at that
+            axis, and `...` for any number of middle axes.
             Shape: (...,)
         arg_name (str, optional): Name used in error messages. Default: "array".
 
@@ -296,7 +296,7 @@ def _validate_shape_parts(
         )
         raise ValueError(msg)
     for local_dim, expected_dim in enumerate(expected_parts):
-        if expected_dim is None:
+        if expected_dim is None or expected_dim < 0:
             continue
         if expected_dim is ...:
             msg = f"Unexpected ellipsis in shape part for `{arg_name}`."
