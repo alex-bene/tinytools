@@ -2,6 +2,7 @@ import importlib
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from .camera import focal_to_fov, fov_to_focal, fov_to_intrinsics, infer_fov_from_pointmap
     from .coordinate_conversions import CoordinateConversions
     from .mesh_conversions import pt3d_to_trimesh, trimesh_to_pt3d
     from .mesh_operations import simplify_mesh
@@ -29,6 +30,10 @@ if TYPE_CHECKING:
     from .utils import get_scale_and_shift
 
 _LAZY_MAPPING = {
+    "focal_to_fov": ".camera",
+    "fov_to_focal": ".camera",
+    "fov_to_intrinsics": ".camera",
+    "infer_fov_from_pointmap": ".camera",
     "CoordinateConversions": ".coordinate_conversions",
     "pt3d_to_trimesh": ".mesh_conversions",
     "trimesh_to_pt3d": ".mesh_conversions",

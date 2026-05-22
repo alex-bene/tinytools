@@ -118,10 +118,12 @@ def sanitize_bboxes(
     image_heights = image_sizes_hw[..., 0]
     image_widths = image_sizes_hw[..., 1]
 
-    x1 = module.clip(module.floor(bboxes_xyxy[..., 0]), 0, image_widths - 1)
-    y1 = module.clip(module.floor(bboxes_xyxy[..., 1]), 0, image_heights - 1)
-    x2 = module.maximum(module.clip(module.ceil(bboxes_xyxy[..., 2]), 0, image_widths), x1 + 1)
-    y2 = module.maximum(module.clip(module.ceil(bboxes_xyxy[..., 3]), 0, image_heights), y1 + 1)
+    zeros_w = module.zeros_like(image_widths)
+    zeros_h = module.zeros_like(image_heights)
+    x1 = module.clip(module.floor(bboxes_xyxy[..., 0]), zeros_w, image_widths - 1)
+    y1 = module.clip(module.floor(bboxes_xyxy[..., 1]), zeros_h, image_heights - 1)
+    x2 = module.clip(module.ceil(bboxes_xyxy[..., 2]), x1 + 1, image_widths)
+    y2 = module.clip(module.ceil(bboxes_xyxy[..., 3]), y1 + 1, image_heights)
 
     sanitized_bboxes = cast_dtype(stack_along([x1, y1, x2, y2], dim=-1), "int64")
     if to_list:

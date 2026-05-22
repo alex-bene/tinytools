@@ -2,7 +2,6 @@ import importlib
 from typing import TYPE_CHECKING, Any
 
 from .archives import safe_tar_extract_all, safe_zip_extract_all
-from .camera import focal_to_fov, fov_to_focal
 from .image import image_grid, img_from_array, imgs_from_array_batch, tensor_to_pil
 from .imports import (
     MissingOptionalDependency,
@@ -14,6 +13,7 @@ from .imports import (
     optional_module,
     requires,
 )
+from .input_prepare import _LAZY_MAPPING as _INPUT_PREPARE_LAZY_MAPPING
 from .logger import get_logger, setup_prettier_logger
 from .mask_bbox_tools import bboxes_center, pad_bboxes
 from .metaclasses import FrozenNamespaceMeta
@@ -26,6 +26,7 @@ from .transforms import resize
 from .video import get_video_fps, load_video, load_videos, save_video
 
 if TYPE_CHECKING:
+    from .input_prepare import prepare_images, prepare_intrinsics, prepare_pointmaps
     from .threeD import (
         ApparentSize,
         CoordinateConversions,
@@ -55,8 +56,6 @@ if TYPE_CHECKING:
 
 _EAGER_EXPORTS = [
     "bboxes_center",
-    "focal_to_fov",
-    "fov_to_focal",
     "FrozenNamespaceMeta",
     "get_logger",
     "get_video_fps",
@@ -88,11 +87,17 @@ _EAGER_EXPORTS = [
     "tensor_to_pil",
 ]
 
-_THREED_LAZY_EXPORTS = {name: f".threeD{module_path}" for name, module_path in _THREED_LAZY_MAPPING.items()}
+_THREED_LAZY_EXPORTS = dict.fromkeys(_THREED_LAZY_MAPPING, ".threeD")
 _TORCH_LAZY_EXPORTS = dict.fromkeys(_TORCH_LAZY_MAPPING, ".torch")
+_INPUT_PREPARE_LAZY_EXPORTS = dict.fromkeys(_INPUT_PREPARE_LAZY_MAPPING, ".input_prepare")
 
 # An internal mapping from the public name to its source module.
-_LAZY_MAPPING = {"OpenAIAPIModel": ".vlm.openai", **_THREED_LAZY_EXPORTS, **_TORCH_LAZY_EXPORTS}
+_LAZY_MAPPING = {
+    "OpenAIAPIModel": ".vlm.openai",
+    **_THREED_LAZY_EXPORTS,
+    **_TORCH_LAZY_EXPORTS,
+    **_INPUT_PREPARE_LAZY_EXPORTS,
+}
 
 __all__ = tuple(sorted([*_EAGER_EXPORTS, *_LAZY_MAPPING]))
 
