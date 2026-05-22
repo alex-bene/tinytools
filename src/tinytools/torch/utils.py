@@ -27,11 +27,10 @@ def get_zero_safe_values(tensor: torch.Tensor, eps: float) -> torch.Tensor:
 
 def as_float_tensor(x: ArrayTensor, *, device: torch.device | None) -> torch.Tensor:
     """Convert intrinsics to a tensor."""
-    if torch.is_tensor(x):
-        x = x.to(device=device)
-        if not x.is_floating_point():
-            x = x.float()
-    return torch.as_tensor(x, dtype=torch.float32, device=device)
+    x = torch.as_tensor(x, device=device)
+    if not x.is_floating_point():
+        x = x.float()
+    return x
 
 
 def is_integer(x: torch.Tensor) -> bool:
@@ -41,8 +40,7 @@ def is_integer(x: torch.Tensor) -> bool:
 
 def as_int_tensor(x: ArrayTensor, *, device: torch.device | None) -> torch.Tensor:
     """Convert intrinsics to a tensor."""
-    if torch.is_tensor(x):
-        x = x.to(device=device)
-        if not is_integer(x):
-            x = x.long()
-    return torch.as_tensor(x, dtype=torch.long, device=device)
+    x = torch.as_tensor(x, device=device)
+    if not is_integer(x):
+        x = x.long()
+    return x
