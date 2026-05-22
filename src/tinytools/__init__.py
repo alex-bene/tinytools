@@ -46,12 +46,23 @@ if TYPE_CHECKING:
         compose_transform,
         decompose_transform,
         get_scale_and_shift,
+        infer_fov_from_pointmap,
         pt3d_to_trimesh,
         simplify_mesh,
         transform_meshes,
         trimesh_to_pt3d,
     )
-    from .torch import ConstantLayer, FFBlock, GatedMLP, LocationHead, VanillaMLP, freeze_module
+    from .torch import (
+        ConstantLayer,
+        FFBlock,
+        GatedMLP,
+        LocationHead,
+        VanillaMLP,
+        as_float_tensor,
+        as_int_tensor,
+        freeze_module,
+        is_integer,
+    )
     from .vlm.openai import OpenAIAPIModel
 
 _EAGER_EXPORTS = [

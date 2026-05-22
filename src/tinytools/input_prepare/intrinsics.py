@@ -9,11 +9,15 @@ import utils3d as u3d
 
 from tinytools.imports import optional_module
 from tinytools.threeD.camera import infer_fov_from_pointmap
+from tinytools.torch.utils import as_float_tensor
+from tinytools.validate import validate_ndim, validate_shape
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
     import torch  # pyright: ignore[reportMissingImports]
+
+    from tinytools.array_ops import ArrayTensor
 else:
     torch = optional_module("torch", extra="torch")
 
@@ -22,9 +26,9 @@ T = TypeVar("T")
 
 
 def prepare_intrinsics(
-    intrinsics: Sequence[np.ndarray | torch.Tensor | None] | np.ndarray | torch.Tensor | None = None,
-    fov_deg: Sequence[float | None] | np.ndarray | torch.Tensor | float | None = None,
-    pointmap: Sequence[np.ndarray | torch.Tensor | None] | np.ndarray | torch.Tensor | None = None,
+    intrinsics: Sequence[ArrayTensor | None] | ArrayTensor | None = None,
+    fov_deg: Sequence[float | None] | ArrayTensor | float | None = None,
+    pointmap: Sequence[ArrayTensor | None] | ArrayTensor | None = None,
     image_size_hw: Sequence[ImageSize | None] | ImageSize | None = None,
     return_type: Literal["fov_deg", "intrinsics_px", "intrinsics_norm"] = "intrinsics_px",
     *,
@@ -87,9 +91,9 @@ def prepare_intrinsics(
 
 def _prepare_single_intrinsics(
     *,
-    intrinsics: np.ndarray | torch.Tensor | None,
+    intrinsics: ArrayTensor | None,
     fov_deg: float | None,
-    pointmap: np.ndarray | torch.Tensor | None,
+    pointmap: ArrayTensor | None,
     image_size_hw: ImageSize | None,
     return_type: Literal["fov_deg", "intrinsics_px", "intrinsics_norm"],
     device: torch.device | None,
@@ -99,20 +103,26 @@ def _prepare_single_intrinsics(
         msg = "At least one of 'intrinsics', 'fov_deg', or 'pointmap' must be provided."
         raise ValueError(msg)
 
+    if fov_deg is not None:
+        fov_deg = as_float_tensor(fov_deg, device=device)
+        validate_ndim(fov_deg, ndim=0, arg_name="fov_deg")
+
     if intrinsics is not None:
-        intrinsics = _as_intrinsics_tensor(intrinsics, device=device)
+        intrinsics = as_float_tensor(intrinsics, device=device)
+        validate_shape(intrinsics, shape=[3, 3], arg_name="intrinsics")
     elif fov_deg is None:
-        fov_deg = torch.tensor(infer_fov_from_pointmap(pointmap), dtype=torch.float32, device=device)
+        validate_ndim(pointmap, ndim=3, arg_name="pointmap")
+        validate_shape(pointmap, shape=[..., 3], arg_name="pointmap")
+        fov_deg = as_float_tensor(infer_fov_from_pointmap(pointmap), device=device)
 
     resolved_image_size = _resolve_image_size(image_size_hw, pointmap)
 
     if return_type == "fov_deg" and fov_deg is not None:
-        return torch.tensor(fov_deg, dtype=torch.float32, device=device)
+        return fov_deg
 
     if intrinsics is None:
-        fov_rad = torch.deg2rad(torch.as_tensor(fov_deg, dtype=torch.float32, device=device))
         intrinsics = u3d.intrinsics_from_fov(
-            fov_x=fov_rad, aspect_ratio=resolved_image_size[1] / resolved_image_size[0]
+            fov_x=torch.deg2rad(fov_deg), aspect_ratio=resolved_image_size[1] / resolved_image_size[0]
         )
 
     is_normalized = _intrinsics_are_normalized(intrinsics)
@@ -129,13 +139,6 @@ def _prepare_single_intrinsics(
     return u3d.denormalize_intrinsics(intrinsics, size=resolved_image_size)
 
 
-def _as_intrinsics_tensor(intrinsics: np.ndarray | torch.Tensor, *, device: torch.device | None) -> torch.Tensor:
-    """Convert intrinsics to a float32 tensor."""
-    if isinstance(intrinsics, torch.Tensor):
-        return intrinsics.to(dtype=torch.float32, device=device)
-    return torch.as_tensor(np.asarray(intrinsics), dtype=torch.float32, device=device)
-
-
 def _intrinsics_are_normalized(intrinsics: torch.Tensor) -> bool:
     """Return whether the intrinsics matrix should be treated as normalized."""
     cx = float(intrinsics[0, 2].item())
@@ -143,12 +146,10 @@ def _intrinsics_are_normalized(intrinsics: torch.Tensor) -> bool:
     return 0.0 <= cx <= 1.0 and 0.0 <= cy <= 1.0
 
 
-def _resolve_image_size(
-    image_size_hw: ImageSize | None, pointmap: np.ndarray | torch.Tensor | None
-) -> tuple[int, int] | None:
+def _resolve_image_size(image_size_hw: ImageSize | None, pointmap: ArrayTensor | None) -> tuple[int, int] | None:
     """Resolve image size as (H, W)."""
     if image_size_hw is not None:
-        if isinstance(image_size_hw, torch.Tensor):
+        if torch.is_tensor(image_size_hw):
             return int(image_size_hw[0].item()), int(image_size_hw[1].item())
         return int(image_size_hw[0]), int(image_size_hw[1])
     if pointmap is None:
@@ -168,17 +169,13 @@ def _is_batch_container(value: object, single_ndim: int) -> bool:
         item = value[0]
         if item is None:
             return True  # has None item so it's a batch container
-        if torch.is_tensor(item) and item.ndim == single_ndim:
-            return True
-        if not torch.is_tensor(item) and np.asarray(item).ndim == single_ndim:
+        if torch.as_tensor(item).ndim == single_ndim:
             return True
 
     return False
 
 
-def _expand_to_batch(
-    value: Sequence[T | None] | T | None, *, batch_size: int, single_ndim: int
-) -> list[np.ndarray | torch.Tensor | ImageSize | float | None]:
+def _expand_to_batch(value: Sequence[T | None] | T | None, *, batch_size: int, single_ndim: int) -> list[T | None]:
     """Expand scalar or None input to a batch-aligned list."""
     if _is_batch_container(value, single_ndim=single_ndim):
         return list(value)

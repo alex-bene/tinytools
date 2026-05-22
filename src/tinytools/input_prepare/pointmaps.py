@@ -4,15 +4,17 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Literal
 
-import numpy as np
 from transformers.image_utils import ChannelDimension, infer_channel_dimension_format
 
 from tinytools.imports import optional_module
 from tinytools.threeD import CoordinateConversions
+from tinytools.torch.utils import as_float_tensor
+from tinytools.validate import validate_ndim, validate_shape
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
+    import numpy as np
     import torch  # pyright: ignore[reportMissingImports]
 else:
     torch = optional_module("torch", extra="torch")
@@ -85,16 +87,15 @@ def prepare_pointmaps(
         if allow_none and pointmap is None:
             result.append(None)
             continue
-        pm_tensor = (
-            pointmap.to(dtype=torch.float32, device=device)
-            if isinstance(pointmap, torch.Tensor)
-            else torch.as_tensor(np.asarray(pointmap), dtype=torch.float32, device=device)
-        )
+        pm_tensor = as_float_tensor(pointmap)
 
         if infer_channel_dimension_format(pm_tensor) == ChannelDimension.FIRST:
             pm_tensor = pm_tensor.permute(1, 2, 0).contiguous()
 
-        transform = transform.to(pm_tensor.device)
+        validate_ndim(pm_tensor, ndim=3, arg_name="pointmaps")
+        validate_shape(pm_tensor, shape=[..., 3], arg_name="pointmaps")
+
+        transform = transform.to(pm_tensor)
         if input_convention != output_convention:
             pm_tensor = pm_tensor @ transform
         result.append(pm_tensor)

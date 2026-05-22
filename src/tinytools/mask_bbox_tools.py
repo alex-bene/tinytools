@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, TypeAlias
 import numpy as np
 from PIL import Image
 
-from .array_ops import any_along, arraytensor, cast_dtype, get_device, max_along, min_along, stack_along
+from .array_ops import any_along, arraytensor, cast_dtype, get_device, is_integer, max_along, min_along, stack_along
 from .imports import module_from_obj
 
 if TYPE_CHECKING:
@@ -50,7 +50,7 @@ def pad_bboxes(
         msg = "bboxes must be a list, tuple, numpy array or torch tensor"
         raise TypeError(msg)
 
-    is_int = (module.__name__ == "torch" and not module.is_floating_point(bboxes)) or bboxes.dtype.kind == "i"
+    is_int = is_integer(bboxes)
 
     if image_sizes_hw is None:
         image_sizes_hw = module.ones_like(bboxes[..., :2])

@@ -185,3 +185,11 @@ def unsqeeze_to(x: ArrayTensor, ndim: int, dim: int = 0) -> ArrayTensor:
     while output.ndim < target_ndim:
         output = unsqueeze_along(output, dim)
     return output
+
+
+def is_integer(x: ArrayTensor) -> ArrayTensor:
+    """Check if an array/tensor is integer type."""
+    module = module_from_obj(x)
+    if module.__name__ == "numpy":
+        return module.issubdtype(x.dtype, module.integer)
+    return not (x.is_floating_point() or x.is_complex() or x.dtype == module.bool)

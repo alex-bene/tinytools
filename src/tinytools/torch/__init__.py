@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from .modules import ConstantLayer, FFBlock, GatedMLP, LocationHead, VanillaMLP
-    from .utils import freeze_module, get_zero_safe_values
+    from .utils import as_float_tensor, as_int_tensor, freeze_module, get_zero_safe_values, is_integer
 
 _LAZY_MAPPING = {
     "GatedMLP": ".modules.gated_mlp",
@@ -13,6 +13,9 @@ _LAZY_MAPPING = {
     "LocationHead": ".modules.location_head",
     "freeze_module": ".utils",
     "get_zero_safe_values": ".utils",
+    "is_integer": ".utils",
+    "as_int_tensor": ".utils",
+    "as_float_tensor": ".utils",
 }
 
 __all__ = tuple(sorted(_LAZY_MAPPING))
