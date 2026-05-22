@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import torch
-from torchvision.transforms.v2.functional import pil_to_tensor
+from typing import TYPE_CHECKING
+
 from transformers.image_transforms import convert_to_rgb
 from transformers.image_utils import (
     ChannelDimension,
@@ -13,6 +13,15 @@ from transformers.image_utils import (
     infer_channel_dimension_format,
     make_list_of_images,
 )
+
+from tinytools.imports import optional_module
+
+if TYPE_CHECKING:
+    import torch  # pyright: ignore[reportMissingImports]
+    import torchvision  # pyright: ignore[reportMissingImports]
+else:
+    torch = optional_module("torch", extra="torch")
+    torchvision = optional_module("torchvision", extra="torch")
 
 
 def prepare_images(
@@ -103,7 +112,7 @@ def prepare_single_image(
         image = convert_to_rgb(image)
 
     if image_type == ImageType.PIL:
-        image = pil_to_tensor(image)
+        image = torchvision.transforms.v2.functional.pil_to_tensor(image)
     elif image_type == ImageType.NUMPY:
         # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
         image = torch.from_numpy(image).contiguous()

@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, TypeAlias
 import numpy as np
 from PIL import Image
 
-from .array_ops import any_along, cast_dtype, max_along, min_along, stack_along
+from .array_ops import any_along, arraytensor, cast_dtype, get_device, max_along, min_along, stack_along
 from .imports import module_from_obj
 
 if TYPE_CHECKING:
@@ -25,13 +25,24 @@ def bboxes_center(bboxes: ArrayTensor) -> ArrayTensor:
 
 
 def pad_bboxes(
-    bboxes: list | ArrayTensor, image_sizes: list | ArrayTensor | None, padding_perc: float = 0.1
+    bboxes: list | ArrayTensor, image_sizes_hw: list | ArrayTensor | None, padding_perc: float = 0.1
 ) -> list[list[float]] | ArrayTensor:
-    """Pad/dilate bounding boxes by a percentage of their width and height."""
+    """Pad/dilate bounding boxes by a percentage of their width and height.
+
+    Args:
+        bboxes (list | ArrayTensor): Bounding boxes in `(x1, y1, x2, y2)` format. Shape: (..., 4).
+        image_sizes_hw (list | ArrayTensor | None): Image sizes as `(H, W)`. If None, unit image sizes are used for
+            clipping. Shape: (..., 2). Default: None.
+        padding_perc (float, optional): Fraction of bbox width and height used to expand each side. Default: 0.1.
+
+    Returns:
+        list[list[float]] | ArrayTensor: Padded bounding boxes in `(x1, y1, x2, y2)` format. Shape: (..., 4).
+
+    """
     to_list = False
     if isinstance(bboxes, (list, tuple)):
         bboxes = np.asarray(bboxes)
-        image_sizes = np.asarray(image_sizes) if image_sizes is not None else None
+        image_sizes_hw = np.asarray(image_sizes_hw) if image_sizes_hw is not None else None
         to_list = True
 
     module = module_from_obj(bboxes)
@@ -41,17 +52,17 @@ def pad_bboxes(
 
     is_int = (module.__name__ == "torch" and not module.is_floating_point(bboxes)) or bboxes.dtype.kind == "i"
 
-    if image_sizes is None:
-        image_sizes = module.ones_like(bboxes[..., :2])
+    if image_sizes_hw is None:
+        image_sizes_hw = module.ones_like(bboxes[..., :2])
 
     if bboxes.shape[-1] != 4:
         msg = "bboxes must be shape (..., 4)"
         raise ValueError(msg)
-    if image_sizes.shape[-1] != 2:
-        msg = "image_sizes must be shape (..., 2)"
+    if image_sizes_hw.shape[-1] != 2:
+        msg = "image_sizes_hw must be shape (..., 2)"
         raise ValueError(msg)
-    if bboxes.shape[:-1] != image_sizes.shape[:-1]:
-        msg = "bboxes and image_sizes must have the same number of dims and same size in each (apart from the last)"
+    if bboxes.shape[:-1] != image_sizes_hw.shape[:-1]:
+        msg = "bboxes and image_sizes_hw must have the same number of dims and same size in each (apart from the last)"
         raise ValueError(msg)
 
     bbox_widths = bboxes[..., 2] - bboxes[..., 0]
@@ -59,14 +70,19 @@ def pad_bboxes(
     dx = bbox_widths * float(padding_perc)
     dy = bbox_heights * float(padding_perc)
 
-    xmin = module.maximum(module.minimum(bboxes[..., 0], 0), module.floor(bboxes[..., 0] - dx))
-    ymin = module.maximum(module.minimum(bboxes[..., 1], 0), module.floor(bboxes[..., 1] - dy))
-    xmax = module.minimum(module.maximum(bboxes[..., 2], image_sizes[..., 0]), module.ceil(bboxes[..., 2] + dx))
-    ymax = module.minimum(module.maximum(bboxes[..., 3], image_sizes[..., 1]), module.ceil(bboxes[..., 3] + dy))
+    image_heights = image_sizes_hw[..., 0]
+    image_widths = image_sizes_hw[..., 1]
+    zeros_x = module.zeros_like(bboxes[..., 0])
+    zeros_y = module.zeros_like(bboxes[..., 1])
+
+    xmin = module.maximum(module.minimum(bboxes[..., 0], zeros_x), module.floor(bboxes[..., 0] - dx))
+    ymin = module.maximum(module.minimum(bboxes[..., 1], zeros_y), module.floor(bboxes[..., 1] - dy))
+    xmax = module.minimum(module.maximum(bboxes[..., 2], image_widths), module.ceil(bboxes[..., 2] + dx))
+    ymax = module.minimum(module.maximum(bboxes[..., 3], image_heights), module.ceil(bboxes[..., 3] + dy))
     padded_bboxes = stack_along([xmin, ymin, xmax, ymax], dim=-1)
 
     if is_int:
-        padded_bboxes = padded_bboxes.int() if module.__name__ == "torch" else padded_bboxes.astype(int)
+        padded_bboxes = cast_dtype(padded_bboxes, bboxes.dtype)
     if to_list:
         return padded_bboxes.tolist()
     return padded_bboxes
@@ -93,10 +109,7 @@ def sanitize_bboxes(
         raise TypeError(msg)
 
     if module_from_obj(image_sizes_hw).__name__ != module.__name__:
-        if module.__name__ == "numpy":
-            image_sizes_hw = np.asarray(image_sizes_hw)
-        else:
-            image_sizes_hw = module.as_tensor(image_sizes_hw, device=bboxes_xyxy.device)
+        image_sizes_hw = arraytensor(image_sizes_hw, device=get_device(bboxes_xyxy))
 
     if bboxes_xyxy.shape[-1] != 4:
         msg = "bboxes_xyxy must be shape (..., 4)"

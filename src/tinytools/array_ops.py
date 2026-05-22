@@ -99,10 +99,11 @@ def arraytensor(x: Any, dtype: None = None, *, module: ModuleType, **kwargs) -> 
     return module.tensor(x, dtype=dtype, **kwargs)
 
 
-def cast_dtype(x: ArrayTensor, dtype_name: str, copy: bool | None = None) -> ArrayTensor:
-    """Cast arrays/tensors to a module dtype by name (e.g. 'int64', 'float32')."""
+def cast_dtype(x: ArrayTensor, dtype: str | torch.dtype | np.dtype, copy: bool | None = None) -> ArrayTensor:
+    """Cast arrays/tensors to a module dtype by name (e.g. 'int64', 'float32'), torch dtype or numpy dtype."""
     module = module_from_obj(x)
-    dtype = getattr(module, dtype_name)
+    if isinstance(dtype, str):
+        dtype = getattr(module, dtype)
     if module.__name__ == "numpy":
         return x.astype(dtype, copy=True if copy is None else copy)
     return x.to(dtype=dtype, copy=False if copy is None else copy)
@@ -126,3 +127,61 @@ def rad2deg(x: ArrayTensor) -> ArrayTensor:
     """Convert radians to degrees for numpy arrays or torch tensors."""
     module = module_from_obj(x)
     return module.rad2deg(x)
+
+
+def squeeze_along(x: ArrayTensor, dim: int) -> ArrayTensor:
+    """Squeeze along a dimension for numpy arrays or torch tensors."""
+    module = module_from_obj(x)
+    return module.squeeze(x, **{("axis" if module.__name__ == "numpy" else "dim"): dim})
+
+
+def unsqueeze_along(x: ArrayTensor, dim: int) -> ArrayTensor:
+    """Unsqueeze along a dimension for numpy arrays or torch tensors."""
+    module = module_from_obj(x)
+    if module.__name__ == "numpy":
+        return module.expand_dims(x, axis=dim)
+    return module.unsqueeze(x, dim=dim)
+
+
+def squeeze_to(x: ArrayTensor, ndim: int, dim: int = 0) -> ArrayTensor:
+    """Squeeze dimension `dim` until the ArrayTensor reaches the target rank."""
+    target_ndim = int(ndim)
+    if x.ndim < target_ndim:
+        msg = f"Cannot squeeze from rank {x.ndim} to larger rank {target_ndim}."
+        raise ValueError(msg)
+    dim = int(dim)
+    if dim < 0:
+        dim += x.ndim
+    if dim >= x.ndim:
+        msg = f"Cannot squeeze dimension {dim} from rank {x.ndim}."
+        raise ValueError(msg)
+
+    output = x
+    while output.ndim > target_ndim:
+        if output.shape[dim] != 1:
+            msg = (
+                f"Cannot squeeze dimension {dim} with size {output.shape[dim]} "
+                f"to reach rank {target_ndim} from rank {output.ndim}."
+            )
+            raise ValueError(msg)
+        output = squeeze_along(output, dim)
+    return output
+
+
+def unsqeeze_to(x: ArrayTensor, ndim: int, dim: int = 0) -> ArrayTensor:
+    """Unsqueeze dimension `dim` until the ArrayTensor reaches the target rank."""
+    target_ndim = int(ndim)
+    if x.ndim < target_ndim:
+        msg = f"Cannot unsqueeze from rank {x.ndim} to larger rank {target_ndim}."
+        raise ValueError(msg)
+    dim = int(dim)
+    if dim < 0:
+        dim += x.ndim
+    if dim >= x.ndim:
+        msg = f"Cannot unsqueeze dimension {dim} from rank {x.ndim}."
+        raise ValueError(msg)
+
+    output = x
+    while output.ndim < target_ndim:
+        output = unsqueeze_along(output, dim)
+    return output

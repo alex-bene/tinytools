@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, TypeAlias
 
 import numpy as np
-import utils3d as u3d
 
-from tinytools.array_ops import all_along, arraytensor, atan, cast_dtype, deg2rad, get_device, numel, rad2deg
+from tinytools.array_ops import all_along, arraytensor, atan, cast_dtype, get_device, numel, rad2deg
 from tinytools.imports import module_from_obj, optional_module
 
 if TYPE_CHECKING:
@@ -19,136 +17,6 @@ else:
     torch = optional_module("torch", extra="torch")
 
     ArrayTensor = Any
-
-
-def focal_to_fov(
-    focal_length: float | ArrayTensor,
-    image_size_px: int | ArrayTensor | None = None,
-    *,
-    is_pixels: bool = True,
-    in_degrees: bool = True,
-) -> float | ArrayTensor:
-    """Convert focal length to field of view.
-
-    Args:
-        focal_length (float | ArrayTensor): Focal length. If batched, it must be
-            broadcastable with `image_size_px`. Shape: (...)
-        image_size_px (int | ArrayTensor | None, optional): Image size in pixels for
-            the matching axis. If None, `is_pixels` must be False. Shape: (...)
-        is_pixels (bool, optional): If True, interpret `focal_length` in pixels. Default: True.
-        in_degrees (bool, optional): If True, return FOV angles in degrees. Default: True.
-
-    Returns:
-        float | ArrayTensor: Field of view. Shape: (...)
-
-    """
-    if isinstance(focal_length, (Sequence, int, float)):
-        focal_length = arraytensor(focal_length, module=np, dtype=np.float32)
-
-    module = module_from_obj(focal_length)
-    device = get_device(focal_length)
-    if isinstance(image_size_px, (Sequence, int, float)):
-        image_size_px = arraytensor(image_size_px, module=module, dtype=module.float32, device=device)
-
-    if is_pixels:
-        if image_size_px is None:
-            msg = "image_size_px is required when focal_length is in pixels."
-            raise ValueError(msg)
-        focal_length = focal_length / image_size_px
-
-    focal_length = cast_dtype(focal_length, "float32")
-    fov = u3d.focal_to_fov(focal_length)
-    if in_degrees:
-        fov = rad2deg(fov)
-    return _maybe_to_python_scalar(cast_dtype(fov, "float32"))
-
-
-def fov_to_focal(
-    fov: float | ArrayTensor,
-    image_size_px: int | ArrayTensor | None = None,
-    is_degrees: bool = True,
-    in_pixels: bool = True,
-) -> float | ArrayTensor:
-    """Convert field of view to focal length in pixels.
-
-    Args:
-        fov (float | ArrayTensor): Field of view for the matching axis. Shape: (...)
-        image_size_px (int | ArrayTensor | None, optional): Image size in pixels for
-            the matching axis. If None, `in_pixels` must be False. Shape: (...)
-        is_degrees (bool, optional): If True, interpret `fov` in degrees. Default: True.
-        in_pixels (bool, optional): If True, return focal length in pixels. Default: True.
-
-    Returns:
-        float | ArrayTensor: Focal length in pixels. Shape: (...)
-
-    """
-    if in_pixels and image_size_px is None:
-        msg = "image_size_px is required when output is in pixels."
-        raise ValueError(msg)
-
-    if isinstance(fov, (Sequence, int, float)):
-        fov = arraytensor(fov, module=np, dtype=np.float32)
-    if isinstance(image_size_px, (Sequence, int, float)):
-        image_size_px = arraytensor(image_size_px, module=np, dtype=np.float32)
-
-    if is_degrees:
-        fov = deg2rad(fov)
-    focal = u3d.fov_to_focal(fov)
-    if in_pixels:
-        focal *= image_size_px
-    return _maybe_to_python_scalar(focal)
-
-
-def fov_to_intrinsics(
-    fov: float | ArrayTensor,
-    image_size_hw: tuple[int, int] | ArrayTensor | None = None,
-    in_degrees: bool = True,
-    in_pixels: bool = True,
-) -> ArrayTensor:
-    """Convert horizontal FOV to an OpenCV intrinsics matrix.
-
-    Args:
-        fov (float | ArrayTensor): Horizontal field of view. Shape: (...)
-        image_size_hw (tuple[int, int] | ArrayTensor | None, optional): Image size
-            as `(H, W)`. If batched, the trailing shape must be `(2,)`. Shape: (..., 2)
-        in_degrees (bool, optional): If True, interpret `fov` in degrees. Default: True.
-        in_pixels (bool, optional): If True, return intrinsics in pixels; otherwise
-            return normalized intrinsics. Default: True.
-
-    Returns:
-        ArrayTensor: OpenCV intrinsics. Shape: (..., 3, 3)
-
-    """
-    if in_pixels and image_size_hw is None:
-        msg = "image_size_hw is required when output is in pixels."
-        raise ValueError(msg)
-
-    if isinstance(fov, (Sequence, int, float)):
-        fov = arraytensor(fov, module=np, dtype=np.float32)
-
-    module = module_from_obj(fov)
-    device = get_device(fov)
-
-    if in_degrees:
-        fov = deg2rad(fov)
-
-    aspect_ratio: float | ArrayTensor = 1.0
-    if image_size_hw is not None:
-        if isinstance(image_size_hw, (Sequence, int, float)):
-            image_size_hw = arraytensor(image_size_hw, module=module, dtype=module.float32, device=device)
-
-        if image_size_hw.shape[-1] != 2:
-            msg = f"image_size_hw must have trailing shape (2,), got {image_size_hw.shape}"
-            raise ValueError(msg)
-
-        image_height = image_size_hw[..., 0]
-        image_width = image_size_hw[..., 1]
-        aspect_ratio = image_width / image_height
-
-    intrinsics = u3d.intrinsics_from_fov(fov_x=fov, aspect_ratio=aspect_ratio)
-    if in_pixels:
-        intrinsics = u3d.denormalize_intrinsics(intrinsics, size=image_size_hw)
-    return intrinsics
 
 
 def infer_fov_from_pointmap(pointmap: ArrayTensor) -> float | ArrayTensor:
@@ -185,15 +53,6 @@ def infer_fov_from_pointmap(pointmap: ArrayTensor) -> float | ArrayTensor:
     estimates = [_infer_fov_single(flat_pointmaps[idx]) for idx in range(flat_batch)]
 
     return module.stack(estimates).reshape(batch_shape)
-
-
-def _maybe_to_python_scalar(value: float | ArrayTensor) -> float | ArrayTensor:
-    """Return Python floats for scalar NumPy outputs and leave arrays/tensors unchanged."""
-    if isinstance(value, np.ndarray) and value.ndim == 0:
-        return float(value)
-    if isinstance(value, np.generic):
-        return float(value)
-    return value
 
 
 def _infer_fov_single(pointmap: ArrayTensor) -> ArrayTensor:

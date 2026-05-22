@@ -5,13 +5,17 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, TypeVar
 
 import numpy as np
-import torch
 import utils3d as u3d
 
+from tinytools.imports import optional_module
 from tinytools.threeD.camera import infer_fov_from_pointmap
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+    import torch  # pyright: ignore[reportMissingImports]
+else:
+    torch = optional_module("torch", extra="torch")
 
 ImageSize = tuple[int, int] | list[int] | np.ndarray | torch.Tensor
 T = TypeVar("T")
@@ -21,7 +25,7 @@ def prepare_intrinsics(
     intrinsics: Sequence[np.ndarray | torch.Tensor | None] | np.ndarray | torch.Tensor | None = None,
     fov_deg: Sequence[float | None] | np.ndarray | torch.Tensor | float | None = None,
     pointmap: Sequence[np.ndarray | torch.Tensor | None] | np.ndarray | torch.Tensor | None = None,
-    image_size: Sequence[ImageSize | None] | ImageSize | None = None,
+    image_size_hw: Sequence[ImageSize | None] | ImageSize | None = None,
     return_type: Literal["fov_deg", "intrinsics_px", "intrinsics_norm"] = "intrinsics_px",
     *,
     device: torch.device | None = None,
@@ -35,8 +39,8 @@ def prepare_intrinsics(
             in degrees. Shape: () or (...,). Default: None.
         pointmap (Sequence[ndarray | Tensor | None] | ndarray | Tensor | None, optional): Pointmap used for
             image-size extraction and FOV inference. Shape: (H, W, 3) or [(H, W, 3), ...]. Default: None.
-        image_size (Sequence[ImageSize | None] | ImageSize | None, optional): Image size as (H, W). If provided,
-            it is preferred over `pointmap` for size-dependent intrinsics conversions. Default: None.
+        image_size_hw (Sequence[ImageSize | None] | ImageSize | None, optional): Image size as `(H, W)`. If
+            provided, it is preferred over `pointmap` for size-dependent intrinsics conversions. Default: None.
         return_type (Literal["fov_deg", "intrinsics_px", "intrinsics_norm"], optional): Desired output format.
             Default: "intrinsics_px".
         device (torch.device | None, optional): Device used when returning intrinsics tensors. If None, tensors are
@@ -56,26 +60,26 @@ def prepare_intrinsics(
 
     sequence_inputs = [
         value
-        for value, single_ndim in ((intrinsics, 2), (fov_deg, 0), (pointmap, 3), (image_size, 1))
+        for value, single_ndim in ((intrinsics, 2), (fov_deg, 0), (pointmap, 3), (image_size_hw, 1))
         if _is_batch_container(value, single_ndim=single_ndim)
     ]
     batch_size = len(sequence_inputs[0]) if sequence_inputs else 1
     intrinsics_seq = _expand_to_batch(intrinsics, batch_size=batch_size, single_ndim=2)
     fov_seq = _expand_to_batch(fov_deg, batch_size=batch_size, single_ndim=0)
     pointmap_seq = _expand_to_batch(pointmap, batch_size=batch_size, single_ndim=3)
-    image_size_seq = _expand_to_batch(image_size, batch_size=batch_size, single_ndim=1)
+    image_size_hw_seq = _expand_to_batch(image_size_hw, batch_size=batch_size, single_ndim=1)
     return torch.stack(
         [
             _prepare_single_intrinsics(
                 intrinsics=intrinsics_i,
                 fov_deg=fov_i,
                 pointmap=pointmap_i,
-                image_size=image_size_i,
+                image_size_hw=image_size_hw_i,
                 return_type=return_type,
                 device=device,
             )
-            for intrinsics_i, fov_i, pointmap_i, image_size_i in zip(
-                intrinsics_seq, fov_seq, pointmap_seq, image_size_seq, strict=True
+            for intrinsics_i, fov_i, pointmap_i, image_size_hw_i in zip(
+                intrinsics_seq, fov_seq, pointmap_seq, image_size_hw_seq, strict=True
             )
         ]
     )
@@ -86,7 +90,7 @@ def _prepare_single_intrinsics(
     intrinsics: np.ndarray | torch.Tensor | None,
     fov_deg: float | None,
     pointmap: np.ndarray | torch.Tensor | None,
-    image_size: ImageSize | None,
+    image_size_hw: ImageSize | None,
     return_type: Literal["fov_deg", "intrinsics_px", "intrinsics_norm"],
     device: torch.device | None,
 ) -> torch.Tensor:
@@ -100,7 +104,7 @@ def _prepare_single_intrinsics(
     elif fov_deg is None:
         fov_deg = torch.tensor(infer_fov_from_pointmap(pointmap), dtype=torch.float32, device=device)
 
-    resolved_image_size = _resolve_image_size(image_size, pointmap)
+    resolved_image_size = _resolve_image_size(image_size_hw, pointmap)
 
     if return_type == "fov_deg" and fov_deg is not None:
         return torch.tensor(fov_deg, dtype=torch.float32, device=device)
@@ -140,13 +144,13 @@ def _intrinsics_are_normalized(intrinsics: torch.Tensor) -> bool:
 
 
 def _resolve_image_size(
-    image_size: ImageSize | None, pointmap: np.ndarray | torch.Tensor | None
+    image_size_hw: ImageSize | None, pointmap: np.ndarray | torch.Tensor | None
 ) -> tuple[int, int] | None:
     """Resolve image size as (H, W)."""
-    if image_size is not None:
-        if isinstance(image_size, torch.Tensor):
-            return int(image_size[0].item()), int(image_size[1].item())
-        return int(image_size[0]), int(image_size[1])
+    if image_size_hw is not None:
+        if isinstance(image_size_hw, torch.Tensor):
+            return int(image_size_hw[0].item()), int(image_size_hw[1].item())
+        return int(image_size_hw[0]), int(image_size_hw[1])
     if pointmap is None:
         return None
     return int(pointmap.shape[0]), int(pointmap.shape[1])

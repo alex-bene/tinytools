@@ -5,13 +5,17 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
-import torch
 from transformers.image_utils import ChannelDimension, infer_channel_dimension_format
 
+from tinytools.imports import optional_module
 from tinytools.threeD import CoordinateConversions
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+    import torch  # pyright: ignore[reportMissingImports]
+else:
+    torch = optional_module("torch", extra="torch")
 
 
 def _get_coordinate_transform(
