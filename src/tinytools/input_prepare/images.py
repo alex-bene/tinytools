@@ -31,7 +31,7 @@ def prepare_images(
     input_data_format: str | ChannelDimension | None = None,
     device: torch.device | None = None,
     allow_none: bool = False,
-) -> list[torch.Tensor | None]:
+) -> list[torch.Tensor | None] | None:
     """Convert image inputs to channel-first tensors.
 
     Args:
@@ -52,14 +52,14 @@ def prepare_images(
             in their original positions. Default: False.
 
     Returns:
-        list[torch.Tensor | None]: Prepared image tensors in channels-first layout, with
-            optional `None` placeholders preserved. Shape: [(C, H, W) | None, ...]
+        list[torch.Tensor | None] | None: Prepared image tensors in channels-first layout,
+            with optional `None` placeholders preserved. Shape: [(C, H, W) | None, ...]
 
     """
     none_locations: list[int] = []
     if allow_none:
         if images is None:
-            return [None]
+            return None
         if isinstance(images, (list, tuple)):
             image_sequence = list(images)
             none_locations = [idx for idx, image in enumerate(image_sequence) if image is None]

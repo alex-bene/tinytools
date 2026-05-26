@@ -55,7 +55,7 @@ def prepare_pointmaps(
     output_convention: Literal["opencv", "opengl", "pytorch3d"] = "opencv",
     device: torch.device | None = None,
     allow_none: bool = False,
-) -> list[torch.Tensor | None]:
+) -> list[torch.Tensor | None] | None:
     """Validate pointmap inputs and convert them to tensors.
 
     Args:
@@ -69,11 +69,11 @@ def prepare_pointmaps(
         allow_none (bool, optional): Allow None values in the input sequence. Default: False.
 
     Returns:
-        list[Tensor | None]: Pointmaps as float32 tensors on `device`. Shape: [(H, W, 3) | None, ...]
+        list[Tensor | None] | None: Pointmaps as float32 tensors on `device`. Shape: [(H, W, 3) | None, ...]
 
     """
     if pointmaps is None and allow_none:
-        return [None]
+        return None
 
     if hasattr(pointmaps, "ndim") and pointmaps.ndim == 3:
         pointmaps = [pointmaps]
