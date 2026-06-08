@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import numpy as np
+
 from tinytools.imports import optional_module
 
 if TYPE_CHECKING:
@@ -27,6 +29,8 @@ def get_zero_safe_values(tensor: torch.Tensor, eps: float) -> torch.Tensor:
 
 def as_float_tensor(x: ArrayTensor, *, device: torch.device | None) -> torch.Tensor:
     """Convert intrinsics to a tensor."""
+    if not torch.is_tensor(x):
+        x = np.asarray(x)
     x = torch.as_tensor(x, device=device)
     if not x.is_floating_point():
         x = x.float()
@@ -40,6 +44,8 @@ def is_integer(x: torch.Tensor) -> bool:
 
 def as_int_tensor(x: ArrayTensor, *, device: torch.device | None) -> torch.Tensor:
     """Convert intrinsics to a tensor."""
+    if not torch.is_tensor(x):
+        x = np.asarray(x)
     x = torch.as_tensor(x, device=device)
     if not is_integer(x):
         x = x.long()
