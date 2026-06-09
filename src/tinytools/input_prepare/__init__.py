@@ -2,11 +2,17 @@ import importlib
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .images import prepare_images
+    from .bounding_boxes import BBox, BBoxInput, prepare_bboxes
+    from .images import ImageInput, prepare_images
     from .intrinsics import prepare_intrinsics
     from .pointmaps import prepare_pointmaps
 
-_LAZY_MAPPING = {"prepare_images": ".images", "prepare_intrinsics": ".intrinsics", "prepare_pointmaps": ".pointmaps"}
+_LAZY_MAPPING = {
+    "prepare_images": ".images",
+    "prepare_intrinsics": ".intrinsics",
+    "prepare_pointmaps": ".pointmaps",
+    "prepare_bboxes": ".bounding_boxes",
+}
 
 __all__ = tuple(sorted(_LAZY_MAPPING))
 

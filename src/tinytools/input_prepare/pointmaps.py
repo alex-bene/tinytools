@@ -14,8 +14,9 @@ from tinytools.validate import validate_ndim, validate_shape
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    import numpy as np
     import torch  # pyright: ignore[reportMissingImports]
+
+    from tinytools.array_ops import ArrayTensor
 else:
     torch = optional_module("torch", extra="torch")
 
@@ -49,7 +50,7 @@ def _get_coordinate_transform(
 
 
 def prepare_pointmaps(
-    pointmaps: Sequence[np.ndarray | torch.Tensor | None] | np.ndarray | torch.Tensor | None,
+    pointmaps: Sequence[ArrayTensor | None] | ArrayTensor | None,
     *,
     input_convention: Literal["opencv", "opengl", "pytorch3d"] = "opencv",
     output_convention: Literal["opencv", "opengl", "pytorch3d"] = "opencv",
@@ -72,8 +73,11 @@ def prepare_pointmaps(
         list[Tensor | None] | None: Pointmaps as float32 tensors on `device`. Shape: [(H, W, 3) | None, ...]
 
     """
-    if pointmaps is None and allow_none:
-        return None
+    if pointmaps is None:
+        if allow_none:
+            return None
+        msg = "`pointmaps` cannot be None unless `allow_none=True`."
+        raise ValueError(msg)
 
     if hasattr(pointmaps, "ndim") and pointmaps.ndim == 3:
         pointmaps = [pointmaps]
@@ -87,7 +91,7 @@ def prepare_pointmaps(
         if allow_none and pointmap is None:
             result.append(None)
             continue
-        pm_tensor = as_float_tensor(pointmap)
+        pm_tensor = as_float_tensor(pointmap, device=device)
 
         if infer_channel_dimension_format(pm_tensor) == ChannelDimension.FIRST:
             pm_tensor = pm_tensor.permute(1, 2, 0).contiguous()
@@ -95,8 +99,8 @@ def prepare_pointmaps(
         validate_ndim(pm_tensor, ndim=3, arg_name="pointmaps")
         validate_shape(pm_tensor, shape=[..., 3], arg_name="pointmaps")
 
-        transform = transform.to(pm_tensor)
         if input_convention != output_convention:
+            transform = transform.to(pm_tensor)
             pm_tensor = pm_tensor @ transform
         result.append(pm_tensor)
     return result

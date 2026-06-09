@@ -26,7 +26,7 @@ from .transforms import resize
 from .video import get_video_fps, load_video, load_videos, save_video
 
 if TYPE_CHECKING:
-    from .input_prepare import prepare_images, prepare_intrinsics, prepare_pointmaps
+    from .input_prepare import prepare_bboxes, prepare_images, prepare_intrinsics, prepare_pointmaps
     from .threeD import (
         ApparentSize,
         CoordinateConversions,

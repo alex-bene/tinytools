@@ -64,6 +64,8 @@ def prepare_images(
             image_sequence = list(images)
             none_locations = [idx for idx, image in enumerate(image_sequence) if image is None]
             images = [image for image in image_sequence if image is not None]
+            if len(images) == 0:
+                return [None] * len(none_locations)
 
     images_list = make_list_of_images(images, expected_ndims=expected_ndims)
     prepared_images = [prepare_single_image(image, do_convert_rgb, input_data_format, device) for image in images_list]

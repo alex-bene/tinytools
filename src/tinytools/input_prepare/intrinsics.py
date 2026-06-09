@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal, TypeVar
+from typing import TYPE_CHECKING, Literal
 
-import numpy as np
 import utils3d as u3d
 
 from tinytools.imports import optional_module
@@ -12,17 +11,18 @@ from tinytools.threeD.camera import infer_fov_from_pointmap
 from tinytools.torch.utils import as_float_tensor
 from tinytools.validate import validate_ndim, validate_shape
 
+from .utils import expand_to_batch, is_batch_container
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
     import torch  # pyright: ignore[reportMissingImports]
 
     from tinytools.array_ops import ArrayTensor
+
+    ImageSize = tuple[int, int] | list[int] | ArrayTensor
 else:
     torch = optional_module("torch", extra="torch")
-
-ImageSize = tuple[int, int] | list[int] | np.ndarray | torch.Tensor
-T = TypeVar("T")
 
 
 def prepare_intrinsics(
@@ -39,7 +39,7 @@ def prepare_intrinsics(
     Args:
         intrinsics (Sequence[ndarray | Tensor | None] | ndarray | Tensor | None, optional): Camera intrinsics in
             pixel or normalized units. Shape: (3, 3) or [(3, 3), ...]. Default: None.
-        fov_deg (Sequence[float | None] | np.ndarray | torch.Tensor | float | None, optional): Horizontal field of view
+        fov_deg (Sequence[float | None] | ArrayTensor | float | None, optional): Horizontal field of view
             in degrees. Shape: () or (...,). Default: None.
         pointmap (Sequence[ndarray | Tensor | None] | ndarray | Tensor | None, optional): Pointmap used for
             image-size extraction and FOV inference. Shape: (H, W, 3) or [(H, W, 3), ...]. Default: None.
@@ -65,13 +65,13 @@ def prepare_intrinsics(
     sequence_inputs = [
         value
         for value, single_ndim in ((intrinsics, 2), (fov_deg, 0), (pointmap, 3), (image_size_hw, 1))
-        if _is_batch_container(value, single_ndim=single_ndim)
+        if is_batch_container(value, single_ndim=single_ndim)
     ]
     batch_size = len(sequence_inputs[0]) if sequence_inputs else 1
-    intrinsics_seq = _expand_to_batch(intrinsics, batch_size=batch_size, single_ndim=2)
-    fov_seq = _expand_to_batch(fov_deg, batch_size=batch_size, single_ndim=0)
-    pointmap_seq = _expand_to_batch(pointmap, batch_size=batch_size, single_ndim=3)
-    image_size_hw_seq = _expand_to_batch(image_size_hw, batch_size=batch_size, single_ndim=1)
+    intrinsics_seq = expand_to_batch(intrinsics, batch_size=batch_size, single_ndim=2)
+    fov_seq = expand_to_batch(fov_deg, batch_size=batch_size, single_ndim=0)
+    pointmap_seq = expand_to_batch(pointmap, batch_size=batch_size, single_ndim=3)
+    image_size_hw_seq = expand_to_batch(image_size_hw, batch_size=batch_size, single_ndim=1)
     return torch.stack(
         [
             _prepare_single_intrinsics(
@@ -89,7 +89,7 @@ def prepare_intrinsics(
     )
 
 
-def _prepare_single_intrinsics(
+def _prepare_single_intrinsics(  # noqa: PLR0912
     *,
     intrinsics: ArrayTensor | None,
     fov_deg: float | None,
@@ -116,11 +116,14 @@ def _prepare_single_intrinsics(
         fov_deg = as_float_tensor(infer_fov_from_pointmap(pointmap), device=device)
 
     resolved_image_size = _resolve_image_size(image_size_hw, pointmap)
+    imgsz_error_msg = "`image_size_hw` or `pointmap` is required for this conversion."
 
     if return_type == "fov_deg" and fov_deg is not None:
         return fov_deg
 
     if intrinsics is None:
+        if resolved_image_size is None:
+            raise ValueError(imgsz_error_msg)
         intrinsics = u3d.intrinsics_from_fov(
             fov_x=torch.deg2rad(fov_deg), aspect_ratio=resolved_image_size[1] / resolved_image_size[0]
         )
@@ -130,12 +133,17 @@ def _prepare_single_intrinsics(
         return intrinsics
 
     if return_type in ("intrinsics_norm", "fov_deg") and not is_normalized:
+        if resolved_image_size is None:
+            raise ValueError(imgsz_error_msg)
         intrinsics = u3d.normalize_intrinsics(intrinsics, size=resolved_image_size)
 
     if return_type == "intrinsics_norm":
         return intrinsics
     if return_type == "fov_deg":
         return torch.rad2deg(u3d.intrinsics_to_fov(intrinsics)[0])
+
+    if resolved_image_size is None:
+        raise ValueError(imgsz_error_msg)
     return u3d.denormalize_intrinsics(intrinsics, size=resolved_image_size)
 
 
@@ -155,28 +163,3 @@ def _resolve_image_size(image_size_hw: ImageSize | None, pointmap: ArrayTensor |
     if pointmap is None:
         return None
     return int(pointmap.shape[0]), int(pointmap.shape[1])
-
-
-def _is_batch_container(value: object, single_ndim: int) -> bool:
-    """Return whether value is a top-level container of per-sample inputs."""
-    if (torch.is_tensor(value) and value.ndim == (single_ndim + 1)) or (
-        isinstance(value, np.ndarray) and value.ndim == (single_ndim + 1)
-    ):
-        return True
-    if isinstance(value, (list, tuple)):
-        if not value:
-            return False
-        item = value[0]
-        if item is None:
-            return True  # has None item so it's a batch container
-        if torch.as_tensor(item).ndim == single_ndim:
-            return True
-
-    return False
-
-
-def _expand_to_batch(value: Sequence[T | None] | T | None, *, batch_size: int, single_ndim: int) -> list[T | None]:
-    """Expand scalar or None input to a batch-aligned list."""
-    if _is_batch_container(value, single_ndim=single_ndim):
-        return list(value)
-    return [value] * batch_size

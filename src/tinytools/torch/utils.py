@@ -32,7 +32,7 @@ def as_float_tensor(x: ArrayTensor, *, device: torch.device | None) -> torch.Ten
     if not torch.is_tensor(x):
         x = np.asarray(x)
     x = torch.as_tensor(x, device=device)
-    if not x.is_floating_point():
+    if not x.is_floating_point() or x.dtype == torch.float64:
         x = x.float()
     return x
 
