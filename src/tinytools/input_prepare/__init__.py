@@ -2,7 +2,7 @@ import importlib
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from .bounding_boxes import BBox, BBoxInput, prepare_bboxes
+    from .bounding_boxes import BBoxInput, prepare_bboxes
     from .images import ImageInput, prepare_images
     from .intrinsics import prepare_intrinsics
     from .pointmaps import prepare_pointmaps

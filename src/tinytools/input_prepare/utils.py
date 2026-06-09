@@ -29,7 +29,9 @@ def is_batch_container(value: object, single_ndim: int) -> bool:
         item = value[0]
         if item is None:
             return True  # has None item so it's a batch container
-        if torch.as_tensor(item).ndim == single_ndim:
+        if isinstance(item, (np.ndarray, torch.Tensor)) and item.ndim == single_ndim:
+            return True
+        if np.asarray(item).ndim == single_ndim:
             return True
 
     return False

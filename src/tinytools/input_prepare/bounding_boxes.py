@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import numpy as np
+
 from tinytools.imports import optional_module
 from tinytools.torch.utils import as_float_tensor
 from tinytools.validate import validate_ndim, validate_shape
-
-from .utils import expand_to_batch
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -17,8 +17,7 @@ if TYPE_CHECKING:
 
     from tinytools.array_ops import ArrayTensor
 
-    BBox = tuple[int, int, int, int] | tuple[float, float, float, float] | ArrayTensor
-    BBoxInput = Sequence[BBox | None] | BBox
+    BBoxInput = Sequence[Sequence[tuple[float, float, float, float]] | ArrayTensor | None] | ArrayTensor
 else:
     torch = optional_module("torch", extra="torch")
 
@@ -30,7 +29,7 @@ def prepare_bboxes(
 
     Args:
         bboxes (BBoxInput | None): Input bounding boxes as `(x0, y0, x1, y1)` vectors.
-            Shape: [(4,) | None, ...] or (4,)
+            Shape: [(N, 4), ...]
         device (torch.device | None, optional): Target device for output tensors.
             If `None`, tensors remain on their current/default device. Default: None.
         allow_none (bool, optional): Whether `None` is accepted for the top-level input
@@ -38,7 +37,7 @@ def prepare_bboxes(
 
     Returns:
         list[torch.Tensor | None] | None: Bounding boxes as float tensors on `device`.
-            Shape: [(4,) | None, ...]
+            Shape: [(N, 4) | None, ...]
 
     """
     if bboxes is None:
@@ -47,17 +46,22 @@ def prepare_bboxes(
         msg = "`bboxes` cannot be None unless `allow_none=True`."
         raise ValueError(msg)
 
-    bboxes_list = expand_to_batch(bboxes, single_ndim=1, batch_size=1)
+    bboxes = list(bboxes)
 
     result: list[torch.Tensor] = []
-    for bbox in bboxes_list:
-        if allow_none and bbox is None:
+    for bboxes_i in bboxes:
+        if bboxes_i is None and allow_none:
             result.append(None)
             continue
-        bbox_tensor = as_float_tensor(bbox, device=device)
-        validate_ndim(bbox_tensor, ndim=1, arg_name="bboxes")
-        validate_shape(bbox_tensor, shape=[4], arg_name="bboxes")
-        if device is not None:
-            bbox_tensor = bbox_tensor.to(device)
-        result.append(bbox_tensor)
+        if bboxes_i is None:
+            msg = "`bboxes` cannot be None unless `allow_none=True`."
+            raise ValueError(msg)
+        new_bboxes_i = bboxes_i
+        if not isinstance(bboxes_i, (np.ndarray, torch.Tensor)):
+            new_bboxes_i = np.asarray(bboxes_i, dtype=np.float32)
+        new_bboxes_i = as_float_tensor(new_bboxes_i, device=device)
+        validate_ndim(new_bboxes_i, ndim=2, arg_name="nested bboxes")
+        validate_shape(new_bboxes_i, shape=[-1, 4], arg_name="nested bboxes")
+        result.append(new_bboxes_i)
+
     return result
