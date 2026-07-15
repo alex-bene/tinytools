@@ -27,7 +27,7 @@ else:
 def prepare_images(
     images: ImageInput,
     expected_ndims: int = 3,
-    do_convert_rgb: bool | None = None,
+    do_convert_rgb: bool = False,
     input_data_format: str | ChannelDimension | None = None,
     device: torch.device | None = None,
     allow_none: bool = False,
@@ -39,9 +39,9 @@ def prepare_images(
             grayscale `(H, W)`, channel-first `(C, H, W)`, and channel-last `(H, W, C)`.
         expected_ndims (int, optional): Expected per-image rank used by Hugging Face
             batching utilities. Default: 3.
-        do_convert_rgb (bool | None, optional): Whether to convert each image to RGB
-            before tensor conversion. If `None` or `False`, no explicit RGB conversion
-            is applied. Default: None.
+        do_convert_rgb (bool, optional): Whether to convert each image to RGB
+            before tensor conversion. If `False`, no explicit RGB conversion
+            is applied. Default: False.
         input_data_format (str | ChannelDimension | None, optional): Channel-dimension
             format of each input image. If `None`, the format is inferred per image.
             Default: None.
@@ -76,7 +76,7 @@ def prepare_images(
 
 def prepare_single_image(
     image: ImageInput,
-    do_convert_rgb: bool | None = None,
+    do_convert_rgb: bool = False,
     input_data_format: str | ChannelDimension | None = None,
     device: torch.device | None = None,
 ) -> torch.Tensor:
@@ -91,9 +91,9 @@ def prepare_single_image(
         image (ImageInput): Input image as PIL image, NumPy array, or torch tensor.
             Supported layouts include grayscale `(H, W)`, channel-first `(C, H, W)`,
             and channel-last `(H, W, C)`.
-        do_convert_rgb (bool | None, optional): Whether to convert the input to
-            RGB before tensor conversion. If `None` or `False`, no explicit RGB
-            conversion is applied. Default: None.
+        do_convert_rgb (bool, optional): Whether to convert the input to
+            RGB before tensor conversion. If `False`, no explicit RGB
+            conversion is applied. Default: False.
         input_data_format (str | ChannelDimension | None, optional): Channel-dimension
             format of the input. If `None`, the format is inferred from `image`.
             Default: None.

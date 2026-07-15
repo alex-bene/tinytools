@@ -4,15 +4,18 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, TypeAlias
 
-from .imports import module_from_obj
+from numpy import ndarray
+from torch import Tensor
+
+from .imports import module_from_obj, module_name_from_obj
+
+ArrayTensor: TypeAlias = ndarray | Tensor
 
 if TYPE_CHECKING:
     from types import ModuleType
 
     import numpy as np
     import torch  # pyright: ignore[reportMissingImports]
-
-    ArrayTensor: TypeAlias = np.ndarray | torch.Tensor
 
 
 def all_along(x: ArrayTensor, dim: int) -> ArrayTensor:
@@ -193,3 +196,11 @@ def is_integer(x: ArrayTensor) -> ArrayTensor:
     if module.__name__ == "numpy":
         return module.issubdtype(x.dtype, module.integer)
     return not (x.is_floating_point() or x.is_complex() or x.dtype == module.bool)
+
+
+def clone(x: ArrayTensor) -> ArrayTensor:
+    """Check if an array/tensor is integer type."""
+    if not (hasattr(x, "clone") or hasattr(x, "copy")):
+        msg = f"Input of type {module_name_from_obj(x)} does not implement a clone() or copy() method."
+        raise TypeError(msg)
+    return x.clone() if hasattr(x, "clone") else x.copy()
