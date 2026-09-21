@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 T = TypeVar("T")
 
 
-def validate_shape(array: ArrayTensor, shape: tuple[int | None | EllipsisType, ...], arg_name: str = "array") -> None:
+def validate_shape(array: ArrayTensor, shape: tuple[int | EllipsisType | None, ...], arg_name: str = "array") -> None:
     """Validate that an array shape matches a shape specification.
 
     Args:
@@ -284,10 +284,10 @@ def validate_and_fill_optional_list(
 def _validate_shape_parts(
     *,
     actual_shape: tuple[int, ...],
-    expected_parts: tuple[int | None | EllipsisType, ...],
+    expected_parts: tuple[int | EllipsisType | None, ...],
     offset: int,
     arg_name: str,
-    full_expected: tuple[int | None | EllipsisType, ...],
+    full_expected: tuple[int | EllipsisType | None, ...],
 ) -> None:
     if len(actual_shape) != len(expected_parts):
         msg = (
