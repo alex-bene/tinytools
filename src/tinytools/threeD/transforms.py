@@ -48,27 +48,69 @@ def transform_meshes(meshes: Meshes, transform: Transform3d, inplace: bool = Fal
     return meshes.update_padded(transform.transform_points(meshes.verts_padded()))
 
 
-def compose_transform(scale: Tensor, rotation: Tensor, translation: Tensor) -> Transform3d:
+def compose_transform(
+    scale: Tensor | None = None, rotation: Tensor | None = None, translation: Tensor | None = None
+) -> Transform3d:
     """Compose scale, rotation, and translation into a Transform3d.
 
     The resulting transform applies as: x' = scale * (x @ rotation) + translation.
+    Any component passed as ``None`` is treated as the identity (scale 1, rotation I,
+    translation 0). At least one component must be provided.
 
     Args:
-        scale (Tensor): Scale factor(s). Shape: (B, 3) or (B,) or scalar.
-        rotation (Tensor): Rotation matrix/matrices. Shape: (B, 3, 3) or (3, 3).
-        translation (Tensor): Translation vector(s). Shape: (B, 3) or (3,).
+        scale (Tensor, optional): Scale factor(s). Shape: (B, 3) or (B,) or 0-dim Tensor.
+            If None, treated as identity (1). Default: None.
+        rotation (Tensor, optional): Rotation matrix/matrices. Shape: (B, 3, 3) or (3, 3).
+            If None, treated as identity (I). Default: None.
+        translation (Tensor, optional): Translation vector(s). Shape: (B, 3) or (3,).
+            If None, treated as identity (0). Default: None.
 
     Returns:
         Transform3d: Composed transform as a 4x4 homogeneous matrix.
 
+    Raises:
+        ValueError: If ``scale``, ``rotation`` and ``translation`` are all None.
+
     """
-    if rotation.ndim == 2:
+    if scale is None and rotation is None and translation is None:
+        msg = "At least one of scale, rotation, or translation must be provided."
+        raise ValueError(msg)
+
+    # Reference tensor for dtype/device, in priority order: rotation -> translation -> scale.
+    reference = rotation if rotation is not None else translation if translation is not None else scale
+    device, dtype = reference.device, reference.dtype
+
+    # Normalize the feature layout of the provided components.
+    if rotation is not None and rotation.ndim == 2:
         rotation = rotation.unsqueeze(0)
-    if translation.ndim == 1:
+    if translation is not None and translation.ndim == 1:
         translation = translation.unsqueeze(0)
-    if scale.ndim == 0:
-        scale = scale.reshape(1)
-    tfm = pt3d_Transform3d(dtype=scale.dtype, device=scale.device)
+    if scale is not None:
+        if scale.ndim == 0:
+            scale = scale.reshape(1, 1)
+        elif scale.ndim == 1:
+            scale = scale.unsqueeze(-1)
+
+    # Broadcast the provided components to a common leading (batch) shape.
+    batch_shapes = [t.shape[:-2] for t in (rotation,) if t is not None]
+    batch_shapes += [t.shape[:-1] for t in (translation,) if t is not None]
+    batch_shapes += [t.shape[:-1] for t in (scale,) if t is not None]
+    batch_shape = torch.broadcast_shapes(*batch_shapes)
+
+    # Fill missing components with identities matching the common batch shape.
+    if scale is None:
+        scale = torch.ones(*batch_shape, 3, dtype=dtype, device=device)
+    if rotation is None:
+        rotation = torch.eye(3, dtype=dtype, device=device).expand(*batch_shape, 3, 3)
+    if translation is None:
+        translation = torch.zeros(*batch_shape, 3, dtype=dtype, device=device)
+
+    # Expand every component to the common leading shape (scale is stored as (..., 1) or (..., 3)).
+    scale = scale.expand(*batch_shape, 3)
+    rotation = rotation.expand(*batch_shape, 3, 3)
+    translation = translation.expand(*batch_shape, 3)
+
+    tfm = pt3d_Transform3d(dtype=dtype, device=device)
     return tfm.scale(scale).rotate(rotation).translate(translation)
 
 
@@ -106,11 +148,11 @@ def decompose_transform(
     linear = matrices[:, :3, :3]
     translation = matrices[:, 3, :3]
 
-    scale = torch.norm(linear, dim=-1)
+    scale = torch.linalg.vector_norm(linear, dim=-1)
     rotation = linear / scale.unsqueeze(-1)
 
     if validate_similarity:
-        avg_scale = scale.mean(dim=-1, keepdim=True).expand_as(scale)
+        avg_scale = scale.mean(dim=-1, keepdim=True)
         if not torch.allclose(scale, avg_scale, rtol=similarity_rtol, atol=similarity_atol):
             msg = "Transform is not a similarity: row norms differ (shear or anisotropic scaling)."
             raise ValueError(msg)
