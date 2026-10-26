@@ -116,11 +116,11 @@ class OpenAIAPIModel:
     async def completion_with_retries(
         self,
         messages: list[dict[str, str]],
-        response_format: type[BaseModel] | None | Omit = omit,
+        response_format: type[BaseModel] | Omit | None = omit,
         max_tokens: int = 8192,
-        temperature: float | None | Omit = omit,
-        top_p: float | None | Omit = omit,
-        presence_penalty: float | None | Omit = omit,
+        temperature: float | Omit | None = omit,
+        top_p: float | Omit | None = omit,
+        presence_penalty: float | Omit | None = omit,
         extra_body: Body | None = None,
     ) -> dict[str, str] | None:
         """Completion with retries.
@@ -205,9 +205,9 @@ class OpenAIAPIModel:
         no_cache: bool | None = None,
         ignore_cache: bool | None = None,
         max_tokens: int = 8192,
-        temperature: float | None | Omit = omit,
-        top_p: float | None | Omit = omit,
-        presence_penalty: float | None | Omit = omit,
+        temperature: float | Omit | None = omit,
+        top_p: float | Omit | None = omit,
+        presence_penalty: float | Omit | None = omit,
         extra_body: Body | None = None,
     ) -> str:
         """Make a single forward pass through the VLM/LLM with an optional image, system prompt and response format.
@@ -338,9 +338,9 @@ class OpenAIAPIModel:
         no_cache: bool = False,
         ignore_cache: bool | None = None,
         max_tokens: int = 8192,
-        temperature: float | None | Omit = omit,
-        top_p: float | None | Omit = omit,
-        presence_penalty: float | None | Omit = omit,
+        temperature: float | Omit | None = omit,
+        top_p: float | Omit | None = omit,
+        presence_penalty: float | Omit | None = omit,
         extra_body: Body | None = None,
     ) -> list[str | None]:
         """Make a forward pass through the VLM/LLM with optional images, system prompts and response format.
@@ -400,9 +400,9 @@ class OpenAIAPIModel:
         no_cache: bool | None = None,
         ignore_cache: bool | None = None,
         max_tokens: int = 8192,
-        temperature: float | None | Omit = omit,
-        top_p: float | None | Omit = omit,
-        presence_penalty: float | None | Omit = omit,
+        temperature: float | Omit | None = omit,
+        top_p: float | Omit | None = omit,
+        presence_penalty: float | Omit | None = omit,
         extra_body: Body | None = None,
     ) -> list[str | None]:
         """Make a forward pass through the VLM/LLM with optional images, system prompts and response format.
